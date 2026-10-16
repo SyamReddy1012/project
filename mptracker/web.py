@@ -1,13 +1,11 @@
 """Interactive web dashboard and API server for MPTracker on Render and local machine.
 Features:
-  - Displays user's registered cases (N.K.SYAM, S.Irfan, Nani kumar, S.Yakub, S.javeed, Tharnish, D.Kasim)
-  - Role-based Login: Admin (Police Command) & NGO / Search Party
-  - Dynamic Case Counters: Total, Active, and Closed/Rescued
-  - Add New Missing Person Case
-  - Delete / Remove Case (especially resolved cases)
-  - Custom Video Upload with Camera / Surveillance Location Selector
-  - Real Street-Level Routing (OSRM / OpenStreetMap) following roads and turns
-  - Search Party Shortest Distance Route & Dijkstra turn-by-turn navigation
+  - Separate Full-Screen Dedicated Login Page (Admin vs NGO Search Party)
+  - Dark & Light Mode Theme Toggle with persistent localStorage
+  - Highly Interactive UI: Live Search, Filter Pills, Toast Notifications, Animated Radar
+  - Camera Location Selector & Custom Video Upload Scanner
+  - Real Street-Level Road Network Routing (OSRM) with step-by-step navigation
+  - Add New Case Modal, Delete Resolved Cases, and Live Case Counters
 """
 from __future__ import annotations
 
@@ -40,7 +38,6 @@ CAMERA_LOCATIONS = {
     "Tungabhadra Bridge": {"lat": 15.8420, "lon": 78.0300, "label": "CAM-14: Tungabhadra River Bridge (15.8420, 78.0300)"},
 }
 
-# User's actual registered cases from FACEPROJECT database
 INITIAL_CASES = [
     {
         "id": 1,
@@ -216,7 +213,7 @@ def _calculate_shortest_route(from_lat: float, from_lon: float, to_lat: float, t
 
 
 HTML_APP = """<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -228,470 +225,669 @@ HTML_APP = """<!DOCTYPE html>
       --bg: #070d19;
       --card: #131d31;
       --card-border: #22324e;
-      --accent: #38bdf8;
-      --accent-hover: #0284c7;
+      --header-bg: #040812;
       --text: #f8fafc;
       --text-muted: #94a3b8;
+      --table-head: #08101e;
+      --table-hover: rgba(255, 255, 255, 0.03);
+      --input-bg: #08101e;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
       --success: #10b981;
       --warning: #f59e0b;
       --danger: #ef4444;
       --purple: #a855f7;
+      --shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+    [data-theme="light"] {
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --card-border: #cbd5e1;
+      --header-bg: #ffffff;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --table-head: #f8fafc;
+      --table-hover: rgba(0, 0, 0, 0.03);
+      --input-bg: #f8fafc;
+      --accent: #0284c7;
+      --accent-hover: #0369a1;
+      --success: #059669;
+      --warning: #d97706;
+      --danger: #dc2626;
+      --purple: #7c3aed;
+      --shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease; }
     body { background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
-    
-    header { background: #040812; border-bottom: 1px solid var(--card-border); padding: 0.9rem 1.75rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
-    .brand h1 { font-size: 1.35rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 0.5rem; }
+
+    /* SEPARATE FULL-SCREEN LOGIN PAGE */
+    #screen-login {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 1.5rem;
+      background: var(--bg);
+      background-image: radial-gradient(circle at 50% 20%, rgba(56, 189, 248, 0.08), transparent 70%);
+    }
+    .login-container {
+      width: 100%;
+      max-width: 460px;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 2.25rem 2rem;
+      box-shadow: var(--shadow);
+      position: relative;
+    }
+    .login-logo {
+      width: 48px;
+      height: 48px;
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid var(--accent);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.6rem;
+      margin-bottom: 1rem;
+    }
+    .role-toggle {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      background: var(--input-bg);
+      padding: 0.3rem;
+      border-radius: 8px;
+      border: 1px solid var(--card-border);
+      margin: 1.25rem 0;
+    }
+    .role-btn {
+      padding: 0.6rem 0.5rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .role-btn.active {
+      background: var(--card);
+      color: var(--accent);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+
+    /* TOP NAVBAR */
+    header { background: var(--header-bg); border-bottom: 1px solid var(--card-border); padding: 0.9rem 1.75rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+    .brand h1 { font-size: 1.35rem; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 0.5rem; }
     .badge { background: #0284c7; color: #fff; font-size: 0.72rem; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 9999px; }
-    .reg-id { background: #131d31; color: #cbd5e1; font-size: 0.72rem; padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid #22324e; font-family: monospace; }
+    .reg-id { background: var(--card); color: var(--text-muted); font-size: 0.72rem; padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid var(--card-border); font-family: monospace; }
     
     .nav-actions { display: flex; align-items: center; gap: 0.75rem; }
-    .user-pill { background: #131d31; border: 1px solid var(--card-border); border-radius: 9999px; padding: 0.35rem 0.85rem; font-size: 0.82rem; display: flex; align-items: center; gap: 0.5rem; }
+    .user-pill { background: var(--card); border: 1px solid var(--card-border); border-radius: 9999px; padding: 0.35rem 0.85rem; font-size: 0.82rem; display: flex; align-items: center; gap: 0.5rem; }
     .user-pill .dot { width: 8px; height: 8px; border-radius: 50%; }
     .role-admin { background: #ef4444; }
     .role-ngo { background: #10b981; }
 
-    .btn { background: var(--accent); color: #040812; font-weight: 600; padding: 0.45rem 0.95rem; border-radius: 6px; border: none; cursor: pointer; transition: 0.15s; font-size: 0.85rem; }
-    .btn:hover { background: var(--accent-hover); color: #fff; }
-    .btn-secondary { background: #22324e; color: #fff; }
-    .btn-secondary:hover { background: #33486c; }
+    /* BUTTONS */
+    .btn { background: var(--accent); color: #fff; font-weight: 600; padding: 0.5rem 1rem; border-radius: 6px; border: none; cursor: pointer; transition: 0.15s; font-size: 0.85rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; }
+    .btn:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--card-border); }
+    .btn-secondary:hover { background: var(--input-bg); }
     .btn-success { background: var(--success); color: #fff; }
-    .btn-success:hover { background: #059669; }
+    .btn-success:hover { filter: brightness(1.1); }
     .btn-danger { background: var(--danger); color: #fff; }
-    .btn-danger:hover { background: #dc2626; }
-    .btn-sm { padding: 0.25rem 0.6rem; font-size: 0.75rem; border-radius: 4px; }
+    .btn-danger:hover { filter: brightness(1.1); }
+    .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.75rem; border-radius: 5px; }
+    .theme-toggle-btn { background: var(--card); border: 1px solid var(--card-border); border-radius: 8px; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.1rem; color: var(--text); }
 
     .container { max-width: 1320px; width: 100%; margin: 1.5rem auto; padding: 0 1rem; flex: 1; }
 
-    /* Top Stats Counters */
+    /* STATS COUNTERS */
     .stats-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-    .stat-box { background: var(--card); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem 1.25rem; display: flex; justify-content: space-between; align-items: center; }
-    .stat-title { font-size: 0.78rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; letter-spacing: 0.05em; }
-    .stat-number { font-size: 1.85rem; font-weight: 800; margin-top: 0.2rem; }
-    .stat-icon { font-size: 1.6rem; opacity: 0.85; }
+    .stat-box { background: var(--card); border: 1px solid var(--card-border); border-radius: 10px; padding: 1.1rem 1.25rem; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow); }
+    .stat-title { font-size: 0.76rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; letter-spacing: 0.05em; }
+    .stat-number { font-size: 1.95rem; font-weight: 800; margin-top: 0.2rem; }
+    .stat-icon { font-size: 1.7rem; opacity: 0.85; }
     .c-total { color: var(--accent); }
     .c-active { color: var(--warning); }
     .c-closed { color: var(--success); }
     .c-dispatch { color: var(--purple); }
 
-    /* View Tabs */
+    /* PORTAL TABS */
     .tab-bar { display: flex; gap: 0.5rem; border-bottom: 1px solid var(--card-border); margin-bottom: 1.25rem; }
-    .tab-btn { background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); padding: 0.6rem 1.2rem; font-size: 0.92rem; font-weight: 600; cursor: pointer; transition: 0.15s; }
+    .tab-btn { background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); padding: 0.65rem 1.25rem; font-size: 0.92rem; font-weight: 700; cursor: pointer; transition: 0.15s; }
     .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
 
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem; }
     @media (max-width: 990px) { .grid-2 { grid-template-columns: 1fr; } }
 
-    .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 8px; padding: 1.25rem; display: flex; flex-direction: column; }
+    .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 10px; padding: 1.35rem; display: flex; flex-direction: column; box-shadow: var(--shadow); }
     .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; }
-    .card-title { font-size: 1.05rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
+    .card-title { font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; color: var(--text); }
 
-    #admin-map, #ngo-map { height: 440px; border-radius: 6px; border: 1px solid var(--card-border); z-index: 1; }
+    #admin-map, #ngo-map { height: 440px; border-radius: 8px; border: 1px solid var(--card-border); z-index: 1; }
 
-    /* Video Player & Scanner */
-    .video-container { position: relative; width: 100%; height: 280px; background: #000; border-radius: 6px; overflow: hidden; border: 1px solid var(--card-border); display: flex; align-items: center; justify-content: center; }
+    /* VIDEO SCANNER */
+    .video-container { position: relative; width: 100%; height: 280px; background: #000; border-radius: 8px; overflow: hidden; border: 1px solid var(--card-border); display: flex; align-items: center; justify-content: center; }
     #video-player { width: 100%; height: 100%; object-fit: contain; }
     #canvas-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
     .scan-radar { position: absolute; width: 100%; height: 3px; background: #38bdf8; box-shadow: 0 0 15px #38bdf8; top: 0; display: none; }
     @keyframes radarSweep { 0% { top: 0%; } 50% { top: 96%; } 100% { top: 0%; } }
 
-    .match-alert { background: rgba(16, 185, 129, 0.15); border: 1px solid var(--success); border-radius: 6px; padding: 0.85rem; margin-top: 1rem; }
+    .match-alert { background: rgba(16, 185, 129, 0.12); border: 1px solid var(--success); border-radius: 8px; padding: 1rem; margin-top: 1rem; }
     
-    /* Navigation Callout */
-    .route-callout { background: rgba(56, 189, 248, 0.1); border: 1px solid var(--accent); border-radius: 8px; padding: 1.1rem; margin-bottom: 1.25rem; }
-    .route-stats { display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 0.5rem; }
+    /* ROUTE CALLOUT */
+    .route-callout { background: rgba(56, 189, 248, 0.08); border: 1px solid var(--accent); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.25rem; }
+    .route-stats { display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 0.65rem; }
     .route-item { display: flex; flex-direction: column; }
-    .route-val { font-size: 1.5rem; font-weight: 800; color: #fff; }
-    .route-lbl { font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); }
+    .route-val { font-size: 1.6rem; font-weight: 800; color: var(--text); }
+    .route-lbl { font-size: 0.74rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; }
 
-    /* Tables */
+    /* SEARCH & FILTER BAR */
+    .filter-bar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .search-input { background: var(--input-bg); border: 1px solid var(--card-border); color: var(--text); padding: 0.45rem 0.85rem; border-radius: 6px; font-size: 0.85rem; width: 260px; }
+
+    /* TABLES */
     table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-    th { text-align: left; padding: 0.65rem 0.5rem; background: #08101e; color: var(--text-muted); border-bottom: 1px solid var(--card-border); font-weight: 600; }
-    td { padding: 0.65rem 0.5rem; border-bottom: 1px solid var(--card-border); }
-    tr:hover td { background: rgba(255,255,255,0.02); }
-    .tag { font-size: 0.72rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 4px; text-transform: uppercase; }
-    .tag-active { background: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.4); }
-    .tag-rescued { background: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.4); }
-    .tag-closed { background: rgba(148, 163, 184, 0.2); color: #cbd5e1; border: 1px solid #475569; }
+    th { text-align: left; padding: 0.75rem 0.6rem; background: var(--table-head); color: var(--text-muted); border-bottom: 1px solid var(--card-border); font-weight: 700; }
+    td { padding: 0.75rem 0.6rem; border-bottom: 1px solid var(--card-border); }
+    tr:hover td { background: var(--table-hover); }
+    .tag { font-size: 0.72rem; font-weight: 700; padding: 0.25rem 0.55rem; border-radius: 4px; text-transform: uppercase; }
+    .tag-active { background: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.4); }
+    .tag-rescued { background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.4); }
+    .tag-closed { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); border: 1px solid var(--card-border); }
 
-    /* Modal Backdrop */
-    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 9999; }
-    .modal-box { background: var(--card); border: 1px solid var(--card-border); border-radius: 10px; width: 100%; max-width: 480px; padding: 1.75rem; box-shadow: 0 15px 30px rgba(0,0,0,0.6); }
-    .modal-box h2 { font-size: 1.25rem; margin-bottom: 0.5rem; color: #fff; }
+    /* MODAL */
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+    .modal-box { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; width: 100%; max-width: 480px; padding: 1.75rem; box-shadow: var(--shadow); }
+    .modal-box h2 { font-size: 1.25rem; margin-bottom: 0.4rem; color: var(--text); }
     .form-group { margin-bottom: 0.9rem; display: flex; flex-direction: column; gap: 0.35rem; }
-    .form-group label { font-size: 0.8rem; color: var(--text-muted); }
-    .form-group input, .form-group select, .form-group textarea { background: #08101e; border: 1px solid var(--card-border); color: #fff; padding: 0.55rem 0.75rem; border-radius: 6px; font-size: 0.9rem; }
+    .form-group label { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; }
+    .form-group input, .form-group select, .form-group textarea { background: var(--input-bg); border: 1px solid var(--card-border); color: var(--text); padding: 0.55rem 0.75rem; border-radius: 6px; font-size: 0.9rem; }
+
+    /* TOAST */
+    #toast-msg { position: fixed; bottom: 20px; right: 20px; background: var(--card); border: 1px solid var(--accent); color: var(--text); padding: 0.75rem 1.25rem; border-radius: 8px; box-shadow: var(--shadow); z-index: 10000; font-size: 0.85rem; display: none; }
   </style>
 </head>
 <body>
 
-  <!-- Add Case Modal -->
-  <div id="add-case-modal" class="modal-backdrop" style="display: none;">
-    <div class="modal-box">
-      <h2>+ Enroll New Missing Person Case</h2>
-      <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1.2rem;">
-        Register a new individual into the investigation database and active sighting graph.
-      </p>
-      <form onsubmit="handleCreateCase(event)">
+  <!-- SCREEN 1: SEPARATE DEDICATED LOGIN PAGE -->
+  <div id="screen-login">
+    <div class="login-container">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div class="login-logo">🔍</div>
+        <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">🌓</button>
+      </div>
+
+      <h2 style="font-size: 1.35rem; font-weight: 800; color: var(--text); margin-bottom: 0.25rem;">
+        Missing Person Search-and-Track
+      </h2>
+      <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">
+        Problem Statement 112 &bull; Emergency Command & Field Rescue Portal
+      </div>
+
+      <!-- Quick Role Tabs -->
+      <div class="role-toggle">
+        <button class="role-btn active" id="login-role-admin" onclick="selectLoginRole('admin')">
+          👮 Police Command
+        </button>
+        <button class="role-btn" id="login-role-ngo" onclick="selectLoginRole('ngo')">
+          🚑 NGO Rescue Team
+        </button>
+      </div>
+
+      <form onsubmit="handleLoginSubmit(event)">
         <div class="form-group">
-          <label for="new-name">Full Name *</label>
-          <input type="text" id="new-name" placeholder="e.g. Ramesh Kumar" required />
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-          <div class="form-group">
-            <label for="new-age">Age *</label>
-            <input type="number" id="new-age" value="21" required />
-          </div>
-          <div class="form-group">
-            <label for="new-gender">Gender</label>
-            <select id="new-gender">
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-group">
-          <label for="new-clothes">Clothing & Description</label>
-          <input type="text" id="new-clothes" placeholder="e.g. Yellow t-shirt, blue jeans, cap" />
-        </div>
-        <div class="form-group">
-          <label for="new-loc">Last Seen Location *</label>
-          <input type="text" id="new-loc" placeholder="e.g. CAR STAND" required />
+          <label id="lbl-username">Command Center ID / Username</label>
+          <input type="text" id="login-user" value="admin" required />
         </div>
         <div class="form-group">
-          <label for="new-team">Assigned Response Unit</label>
-          <select id="new-team">
-            <option value="Helping Hands NGO">Helping Hands NGO (Field Response)</option>
-            <option value="City Police Patrol 1">City Police Patrol 1</option>
-            <option value="Volunteer Unit A">Volunteer Unit A</option>
-          </select>
+          <label>Security Password / Access Token</label>
+          <input type="password" id="login-pass" value="admin123" required />
         </div>
-        <div style="display: flex; gap: 0.75rem; margin-top: 1.25rem;">
-          <button type="button" class="btn btn-secondary" onclick="closeAddCaseModal()" style="flex: 1;">Cancel</button>
-          <button type="submit" class="btn btn-success" style="flex: 2;">Save Case & Begin Tracking</button>
-        </div>
+
+        <button type="submit" class="btn" style="width: 100%; padding: 0.75rem; margin-top: 0.5rem; font-size: 0.95rem;">
+          Authenticate & Access Dashboard ➔
+        </button>
       </form>
-    </div>
-  </div>
 
-  <!-- Role Login Modal -->
-  <div id="login-modal" class="modal-backdrop" style="display: none;">
-    <div class="modal-box">
-      <h2>Role-Based Authentication</h2>
-      <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1.2rem;">
-        Switch access level between Command Center and Field Rescue Units.
-      </p>
-      <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-        <button class="btn" style="padding: 0.75rem; text-align: left;" onclick="quickLogin('admin')">
-          <div style="font-weight: 700;">Admin Command Center</div>
-          <div style="font-size: 0.75rem; opacity: 0.85;">Full investigation access, video crowd scanning, camera assignment</div>
-        </button>
-        <button class="btn btn-success" style="padding: 0.75rem; text-align: left;" onclick="quickLogin('ngo')">
-          <div style="font-weight: 700;">NGO / Search Party Portal</div>
-          <div style="font-size: 0.75rem; opacity: 0.85;">Street-level road navigation, field case resolution</div>
-        </button>
-      </div>
-      <div style="margin-top: 1.2rem; text-align: right;">
-        <button class="btn btn-secondary btn-sm" onclick="closeLoginModal()">Close</button>
+      <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-muted);">
+        <div>Reg: <b>25091A32M7</b>, <b>25091A3222</b></div>
+        <div>PostgreSQL &bull; ArcFace</div>
       </div>
     </div>
   </div>
 
-  <header>
-    <div class="brand">
-      <h1>Missing Person Search-and-Track System <span class="badge">Problem Statement 112</span></h1>
-      <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">
-        Active Local Database &bull; Camera Location Selection &bull; Turn-by-Turn Street Routing &bull; Live Case Management
-      </div>
-    </div>
-    <div class="nav-actions">
-      <span class="reg-id">25091A32M7</span>
-      <span class="reg-id">25091A3222</span>
-      <div class="user-pill">
-        <span class="dot role-admin" id="role-dot"></span>
-        <span id="current-user-display" style="font-weight: 600;">Admin: Police Command</span>
-      </div>
-      <button class="btn btn-secondary btn-sm" onclick="openLoginModal()">Switch Role</button>
-    </div>
-  </header>
+  <!-- SCREEN 2: MAIN INVESTIGATION PORTAL (APP) -->
+  <div id="screen-app" style="display: none; flex-direction: column; min-height: 100vh;">
 
-  <div class="container">
-
-    <!-- Top Counters: Total, Active, Closed -->
-    <div class="stats-bar">
-      <div class="stat-box">
-        <div>
-          <div class="stat-title">Total Cases</div>
-          <div class="stat-number c-total" id="cnt-total">0</div>
-        </div>
-        <div class="stat-icon">📋</div>
-      </div>
-      <div class="stat-box">
-        <div>
-          <div class="stat-title">Active Cases</div>
-          <div class="stat-number c-active" id="cnt-active">0</div>
-        </div>
-        <div class="stat-icon">🚨</div>
-      </div>
-      <div class="stat-box">
-        <div>
-          <div class="stat-title">Closed / Rescued</div>
-          <div class="stat-number c-closed" id="cnt-closed">0</div>
-        </div>
-        <div class="stat-icon">✅</div>
-      </div>
-      <div class="stat-box">
-        <div>
-          <div class="stat-title">Field Dispatches</div>
-          <div class="stat-number c-dispatch" id="cnt-dispatches">0</div>
-        </div>
-        <div class="stat-icon">📍</div>
-      </div>
-    </div>
-
-    <!-- Portal View Tabs -->
-    <div class="tab-bar">
-      <button class="tab-btn active" id="tab-admin" onclick="switchView('admin')">Admin Command Center</button>
-      <button class="tab-btn" id="tab-ngo" onclick="switchView('ngo')">NGO / Search Party Portal</button>
-    </div>
-
-    <!-- ADMIN VIEW -->
-    <div id="view-admin">
-      <div class="grid-2">
-
-        <!-- Custom Video Upload & Scanning Section with Camera Location Selection -->
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">🎥 Video & CCTV Facial Recognition Scanner</div>
-            <span class="badge" style="background: #10b981;">DeepFace Active</span>
+    <!-- Add Case Modal -->
+    <div id="add-case-modal" class="modal-backdrop" style="display: none;">
+      <div class="modal-box">
+        <h2>+ Enroll New Missing Person Case</h2>
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1.2rem;">
+          Register a new individual into the investigation database and active sighting graph.
+        </p>
+        <form onsubmit="handleCreateCase(event)">
+          <div class="form-group">
+            <label for="new-name">Full Name *</label>
+            <input type="text" id="new-name" placeholder="e.g. Ramesh Kumar" required />
           </div>
-
-          <!-- Camera Location Dropdown for Video Source -->
-          <div style="background: #08101e; border: 1px solid var(--card-border); border-radius: 6px; padding: 0.75rem; margin-bottom: 0.85rem;">
-            <label for="video-camera-loc" style="font-size: 0.8rem; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.4rem;">
-              📹 Select Surveillance Camera Location:
-            </label>
-            <select id="video-camera-loc" style="width: 100%; background: #131d31; border: 1px solid var(--card-border); color: #fff; padding: 0.45rem 0.65rem; border-radius: 6px; font-size: 0.85rem;">
-              <option value="CAR STAND">CAM-01: CAR STAND (15.8281, 78.0373)</option>
-              <option value="Budhwarpet Market">CAM-02: Budhwarpet Market Junction (15.8350, 78.0450)</option>
-              <option value="Kurnool City Railway">CAM-03: Kurnool City Railway Station (15.8310, 78.0420)</option>
-              <option value="Kurnool Bus Stand">CAM-04: Central Bus Stand Entrance (15.8281, 78.0373)</option>
-              <option value="RGM grounds">CAM-05: RGM Grounds North Field (15.8310, 78.0420)</option>
-              <option value="cantene">CAM-06: Campus Canteen Surveillance (15.8350, 78.0450)</option>
-              <option value="DS labs">CAM-07: DS Labs Corridor (15.8200, 78.0450)</option>
-              <option value="RGM hostel">CAM-08: RGM Hostel Gate (15.8150, 78.0300)</option>
-              <option value="RGM gardens">CAM-09: RGM Gardens Perimeter (15.8340, 78.0560)</option>
-              <option value="Konda Reddy Fort">CAM-10: Konda Reddy Fort Circle (15.8340, 78.0560)</option>
-              <option value="maha nandhi">CAM-11: Maha Nandhi Road Junction (15.8100, 78.0600)</option>
-              <option value="Collectorate">CAM-12: District Collectorate (15.8200, 78.0450)</option>
-              <option value="Government Hospital">CAM-13: Government General Hospital (15.8150, 78.0300)</option>
-              <option value="Tungabhadra Bridge">CAM-14: Tungabhadra River Bridge (15.8420, 78.0300)</option>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+            <div class="form-group">
+              <label for="new-age">Age *</label>
+              <input type="number" id="new-age" value="21" required />
+            </div>
+            <div class="form-group">
+              <label for="new-gender">Gender</label>
+              <select id="new-gender">
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="new-clothes">Clothing & Description</label>
+            <input type="text" id="new-clothes" placeholder="e.g. Yellow t-shirt, blue jeans, cap" />
+          </div>
+          <div class="form-group">
+            <label for="new-loc">Last Seen Location *</label>
+            <input type="text" id="new-loc" placeholder="e.g. CAR STAND" required />
+          </div>
+          <div class="form-group">
+            <label for="new-team">Assigned Response Unit</label>
+            <select id="new-team">
+              <option value="Helping Hands NGO">Helping Hands NGO (Field Response)</option>
+              <option value="City Police Patrol 1">City Police Patrol 1</option>
+              <option value="Volunteer Unit A">Volunteer Unit A</option>
             </select>
           </div>
-
-          <div class="video-container" id="video-box">
-            <video id="video-player" controls playsinline>
-              <source src="" type="video/mp4">
-            </video>
-            <canvas id="canvas-overlay"></canvas>
-            <div class="scan-radar" id="radar-sweep"></div>
-            <div id="video-placeholder" style="position: absolute; text-align: center; color: var(--text-muted); pointer-events: none;">
-              <div style="font-size: 2.2rem; margin-bottom: 0.3rem;">📹</div>
-              <div>No video loaded</div>
-              <div style="font-size: 0.75rem; color: #64748b;">Upload video or click Load Demo Video below</div>
-            </div>
+          <div style="display: flex; gap: 0.75rem; margin-top: 1.25rem;">
+            <button type="button" class="btn btn-secondary" onclick="closeAddCaseModal()" style="flex: 1;">Cancel</button>
+            <button type="submit" class="btn btn-success" style="flex: 2;">Save Case & Begin Tracking</button>
           </div>
-
-          <div style="display: flex; gap: 0.5rem; margin-top: 0.85rem; flex-wrap: wrap;">
-            <input type="file" id="video-file-input" accept="video/*" style="display: none;" onchange="handleVideoUpload(event)">
-            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('video-file-input').click()">
-              📁 Upload My Video
-            </button>
-            <button class="btn btn-secondary btn-sm" onclick="loadSampleVideo()">
-              🎬 Load Demo Video Feed
-            </button>
-            <button class="btn btn-danger btn-sm" id="btn-run-scan" onclick="startVideoScan()" style="margin-left: auto;">
-              ⚡ Scan Video For Matches
-            </button>
-          </div>
-
-          <div id="scan-status" style="font-size: 0.8rem; color: var(--accent); margin-top: 0.6rem; display: none;"></div>
-
-          <div class="match-alert" id="match-box" style="display: none;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span style="font-weight: 700; color: #10b981; font-size: 0.92rem;">🚨 MATCH IDENTIFIED AT SELECTED CAMERA</span>
-              <span class="badge" style="background: #10b981;">Confidence 94.6%</span>
-            </div>
-            <div style="font-size: 0.84rem; margin-top: 0.4rem; color: #e2e8f0;" id="match-details">
-            </div>
-          </div>
-        </div>
-
-        <!-- Sighting Graph & Search Zones Map -->
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">🗺️ Sighting Graph & Search Zone Perimeter</div>
-            <span style="font-size: 0.8rem; color: var(--text-muted);">Kurnool Network</span>
-          </div>
-          <div id="admin-map"></div>
-        </div>
-      </div>
-
-      <!-- Case Registry with Add Case & Delete Resolved Options -->
-      <div class="card" style="margin-bottom: 1.5rem;">
-        <div class="card-header">
-          <div class="card-title">📁 Registered Missing Persons Database</div>
-          <div style="display: flex; gap: 0.5rem;">
-            <button class="btn btn-success btn-sm" onclick="openAddCaseModal()">+ Add New Case</button>
-            <button class="btn btn-secondary btn-sm" onclick="filterCases('ALL')">All</button>
-            <button class="btn btn-secondary btn-sm" onclick="filterCases('ACTIVE')">Active</button>
-            <button class="btn btn-secondary btn-sm" onclick="filterCases('RESOLVED')">Resolved</button>
-          </div>
-        </div>
-        <div style="overflow-x: auto;">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>Age / Gender</th>
-                <th>Clothing Description</th>
-                <th>Last Seen Location</th>
-                <th>Status</th>
-                <th>Assigned Unit</th>
-                <th style="text-align: right;">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="cases-table">
-              <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Loading database cases...</td></tr>
-            </tbody>
-          </table>
-        </div>
+        </form>
       </div>
     </div>
 
-    <!-- NGO / SEARCH PARTY VIEW WITH STREET-LEVEL ROUTING -->
-    <div id="view-ngo" style="display: none;">
-      
-      <!-- Shortest Route Highlight Banner -->
-      <div class="route-callout">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem;">
+    <!-- Header Navigation -->
+    <header>
+      <div class="brand">
+        <h1>Missing Person Search-and-Track System <span class="badge">Problem Statement 112</span></h1>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">
+          Graph Network &bull; Live Video Face Scanning &bull; Turn-by-Turn Road Routing
+        </div>
+      </div>
+      <div class="nav-actions">
+        <span class="reg-id">25091A32M7</span>
+        <span class="reg-id">25091A3222</span>
+
+        <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">🌓</button>
+
+        <div class="user-pill">
+          <span class="dot role-admin" id="role-dot"></span>
+          <span id="current-user-display" style="font-weight: 700;">Admin: Police Command</span>
+        </div>
+
+        <button class="btn btn-secondary btn-sm" onclick="handleLogout()">🚪 Logout</button>
+      </div>
+    </header>
+
+    <div class="container">
+
+      <!-- Top Stats Counters -->
+      <div class="stats-bar">
+        <div class="stat-box">
           <div>
-            <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.35rem;">
-              <span class="badge" style="background: #ef4444;">ACTIVE SEARCH PARTY DISPATCH</span>
-              <span class="badge" style="background: #10b981;">🚗 Turn-by-Turn Street Routing</span>
-            </div>
-            <h2 style="font-size: 1.35rem; color: #fff;">Shortest Road Route to Target Search Zone</h2>
-            <p style="font-size: 0.85rem; color: var(--text-muted);">
-              Assigned Subject: <b id="ngo-subject-name">N.K.SYAM</b> &bull; Target Location: <b id="ngo-target-loc">CAR STAND</b>
-            </p>
+            <div class="stat-title">Total Cases</div>
+            <div class="stat-number c-total" id="cnt-total">0</div>
           </div>
-          <div class="user-pill">
-            <span class="dot role-ngo"></span>
-            <span>Unit: Helping Hands NGO</span>
+          <div class="stat-icon">📋</div>
+        </div>
+        <div class="stat-box">
+          <div>
+            <div class="stat-title">Active Cases</div>
+            <div class="stat-number c-active" id="cnt-active">0</div>
+          </div>
+          <div class="stat-icon">🚨</div>
+        </div>
+        <div class="stat-box">
+          <div>
+            <div class="stat-title">Closed / Rescued</div>
+            <div class="stat-number c-closed" id="cnt-closed">0</div>
+          </div>
+          <div class="stat-icon">✅</div>
+        </div>
+        <div class="stat-box">
+          <div>
+            <div class="stat-title">Field Dispatches</div>
+            <div class="stat-number c-dispatch" id="cnt-dispatches">0</div>
+          </div>
+          <div class="stat-icon">📍</div>
+        </div>
+      </div>
+
+      <!-- Portal Tabs -->
+      <div class="tab-bar">
+        <button class="tab-btn active" id="tab-admin" onclick="switchView('admin')">Admin Command Center</button>
+        <button class="tab-btn" id="tab-ngo" onclick="switchView('ngo')">NGO / Search Party Portal</button>
+      </div>
+
+      <!-- ADMIN VIEW -->
+      <div id="view-admin">
+        <div class="grid-2">
+
+          <!-- Video & CCTV Facial Recognition Scanner -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🎥 Video & CCTV Facial Recognition Scanner</div>
+              <span class="badge" style="background: #10b981;">DeepFace ArcFace</span>
+            </div>
+
+            <!-- Camera Location Selector -->
+            <div style="background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.85rem;">
+              <label for="video-camera-loc" style="font-size: 0.8rem; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.4rem;">
+                📹 Select Surveillance Camera Location:
+              </label>
+              <select id="video-camera-loc" style="width: 100%; background: var(--card); border: 1px solid var(--card-border); color: var(--text); padding: 0.45rem 0.65rem; border-radius: 6px; font-size: 0.85rem;">
+                <option value="CAR STAND">CAM-01: CAR STAND (15.8281, 78.0373)</option>
+                <option value="Budhwarpet Market">CAM-02: Budhwarpet Market Junction (15.8350, 78.0450)</option>
+                <option value="Kurnool City Railway">CAM-03: Kurnool City Railway Station (15.8310, 78.0420)</option>
+                <option value="Kurnool Bus Stand">CAM-04: Central Bus Stand Entrance (15.8281, 78.0373)</option>
+                <option value="RGM grounds">CAM-05: RGM Grounds North Field (15.8310, 78.0420)</option>
+                <option value="cantene">CAM-06: Campus Canteen Surveillance (15.8350, 78.0450)</option>
+                <option value="DS labs">CAM-07: DS Labs Corridor (15.8200, 78.0450)</option>
+                <option value="RGM hostel">CAM-08: RGM Hostel Gate (15.8150, 78.0300)</option>
+                <option value="RGM gardens">CAM-09: RGM Gardens Perimeter (15.8340, 78.0560)</option>
+                <option value="Konda Reddy Fort">CAM-10: Konda Reddy Fort Circle (15.8340, 78.0560)</option>
+                <option value="maha nandhi">CAM-11: Maha Nandhi Road Junction (15.8100, 78.0600)</option>
+                <option value="Collectorate">CAM-12: District Collectorate (15.8200, 78.0450)</option>
+                <option value="Government Hospital">CAM-13: Government General Hospital (15.8150, 78.0300)</option>
+                <option value="Tungabhadra Bridge">CAM-14: Tungabhadra River Bridge (15.8420, 78.0300)</option>
+              </select>
+            </div>
+
+            <div class="video-container" id="video-box">
+              <video id="video-player" controls playsinline>
+                <source src="" type="video/mp4">
+              </video>
+              <canvas id="canvas-overlay"></canvas>
+              <div class="scan-radar" id="radar-sweep"></div>
+              <div id="video-placeholder" style="position: absolute; text-align: center; color: var(--text-muted); pointer-events: none;">
+                <div style="font-size: 2.2rem; margin-bottom: 0.3rem;">📹</div>
+                <div>No video loaded</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Upload video or click Load Demo Feed</div>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 0.5rem; margin-top: 0.85rem; flex-wrap: wrap;">
+              <input type="file" id="video-file-input" accept="video/*" style="display: none;" onchange="handleVideoUpload(event)">
+              <button class="btn btn-secondary btn-sm" onclick="document.getElementById('video-file-input').click()">
+                📁 Upload My Video
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="loadSampleVideo()">
+                🎬 Load Demo Video Feed
+              </button>
+              <button class="btn btn-danger btn-sm" id="btn-run-scan" onclick="startVideoScan()" style="margin-left: auto;">
+                ⚡ Scan Video For Matches
+              </button>
+            </div>
+
+            <div id="scan-status" style="font-size: 0.8rem; color: var(--accent); margin-top: 0.6rem; display: none;"></div>
+
+            <div class="match-alert" id="match-box" style="display: none;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 700; color: #10b981; font-size: 0.92rem;">🚨 MATCH IDENTIFIED IN CAMERA FEED</span>
+                <span class="badge" style="background: #10b981;">Confidence 94.6%</span>
+              </div>
+              <div style="font-size: 0.84rem; margin-top: 0.4rem; color: var(--text);" id="match-details">
+              </div>
+            </div>
+          </div>
+
+          <!-- Sighting Graph & Search Zones Map -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🗺️ Sighting Graph & Search Zone Perimeter</div>
+              <span style="font-size: 0.8rem; color: var(--text-muted);">Kurnool Network</span>
+            </div>
+            <div id="admin-map"></div>
           </div>
         </div>
 
-        <div class="route-stats">
-          <div class="route-item">
-            <div class="route-lbl">Street Distance</div>
-            <div class="route-val" id="route-dist" style="color: var(--accent);">1.74 km</div>
+        <!-- Case Registry with Add Case & Delete Resolved Options -->
+        <div class="card" style="margin-bottom: 1.5rem;">
+          <div class="card-header">
+            <div class="card-title">📁 Registered Missing Persons Database</div>
+            <button class="btn btn-success btn-sm" onclick="openAddCaseModal()">+ Add New Case</button>
           </div>
-          <div class="route-item">
-            <div class="route-lbl">Driving / Response ETA</div>
-            <div class="route-val" id="route-eta" style="color: var(--warning);">2.8 mins</div>
-          </div>
-          <div class="route-item">
-            <div class="route-lbl">Routing Engine</div>
-            <div style="font-size: 0.9rem; color: #cbd5e1; margin-top: 0.2rem;" id="route-engine-badge">
-              OpenStreetMap Road Network (OSRM)
+
+          <!-- Search & Filter Bar -->
+          <div class="filter-bar">
+            <input type="text" class="search-input" id="case-search-input" placeholder="🔍 Search by name, clothes, location..." oninput="handleSearchCases(event)">
+            <div style="display: flex; gap: 0.4rem;">
+              <button class="btn btn-secondary btn-sm" onclick="filterCases('ALL')" id="filter-all">All Cases</button>
+              <button class="btn btn-secondary btn-sm" onclick="filterCases('ACTIVE')" id="filter-active">Active</button>
+              <button class="btn btn-secondary btn-sm" onclick="filterCases('RESOLVED')" id="filter-resolved">Resolved</button>
             </div>
           </div>
-          <div class="route-item">
-            <div class="route-lbl">Street Navigation Path</div>
-            <div style="font-size: 0.9rem; color: #cbd5e1; margin-top: 0.2rem;" id="route-path-text">
-              Budhwarpet Base ➔ City Main Road ➔ CAR STAND
-            </div>
+
+          <div style="overflow-x: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Age / Gender</th>
+                  <th>Clothing Description</th>
+                  <th>Last Seen Location</th>
+                  <th>Status</th>
+                  <th>Assigned Unit</th>
+                  <th style="text-align: right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="cases-table">
+                <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Loading database cases...</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
 
-      <div class="grid-2">
-        <!-- Interactive Street Navigation Map -->
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">📍 Turn-by-Turn Street Navigation Map</div>
-            <span style="font-size: 0.78rem; color: #10b981; font-weight: 600;">Tracing Street Geometry</span>
+      <!-- NGO / SEARCH PARTY VIEW -->
+      <div id="view-ngo" style="display: none;">
+        
+        <!-- Shortest Road Navigation Route Callout -->
+        <div class="route-callout">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.35rem;">
+                <span class="badge" style="background: #ef4444;">ACTIVE SEARCH PARTY DISPATCH</span>
+                <span class="badge" style="background: #10b981;">🚗 Turn-by-Turn Road Route</span>
+              </div>
+              <h2 style="font-size: 1.35rem; color: var(--text);">Shortest Street Route to Target Search Zone</h2>
+              <p style="font-size: 0.85rem; color: var(--text-muted);">
+                Assigned Subject: <b id="ngo-subject-name" style="color: var(--text);">N.K.SYAM</b> &bull; Target Location: <b id="ngo-target-loc" style="color: var(--text);">CAR STAND</b>
+              </p>
+            </div>
+            <div class="user-pill">
+              <span class="dot role-ngo"></span>
+              <span>Unit: Helping Hands NGO</span>
+            </div>
           </div>
-          <div id="ngo-map"></div>
+
+          <div class="route-stats">
+            <div class="route-item">
+              <div class="route-lbl">Street Distance</div>
+              <div class="route-val" id="route-dist" style="color: var(--accent);">1.74 km</div>
+            </div>
+            <div class="route-item">
+              <div class="route-lbl">Driving / Response ETA</div>
+              <div class="route-val" id="route-eta" style="color: var(--warning);">2.8 mins</div>
+            </div>
+            <div class="route-item">
+              <div class="route-lbl">Routing Engine</div>
+              <div style="font-size: 0.9rem; color: var(--text); margin-top: 0.2rem;" id="route-engine-badge">
+                OpenStreetMap Real Road Network (OSRM)
+              </div>
+            </div>
+            <div class="route-item">
+              <div class="route-lbl">Street Navigation Path</div>
+              <div style="font-size: 0.9rem; color: var(--text); margin-top: 0.2rem;" id="route-path-text">
+                Navigating through street nodes to target location
+              </div>
+            </div>
+          </div>
         </div>
 
-        <!-- Field Action & Resolution Card -->
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">📝 Field Status & Case Resolution</div>
-            <span class="tag tag-active" id="ngo-tag-status">Dispatch #101 Active</span>
+        <div class="grid-2">
+          <!-- Interactive Street Navigation Map -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📍 Turn-by-Turn Street Navigation Map</div>
+              <span style="font-size: 0.78rem; color: #10b981; font-weight: 700;">Tracing Street Geometry</span>
+            </div>
+            <div id="ngo-map"></div>
           </div>
 
-          <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-            When the search team reaches the search zone, update the field outcome or close the resolved case:
+          <!-- Field Action & Resolution Card -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📝 Field Status & Case Resolution</div>
+              <span class="tag tag-active" id="ngo-tag-status">Dispatch #101 Active</span>
+            </div>
+
+            <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+              When the search team reaches the search zone, update the field outcome or close the resolved case:
+            </div>
+
+            <form onsubmit="handleResolve(event)">
+              <div class="form-group">
+                <label>Select Case</label>
+                <select id="resolve-case-id" onchange="updateNgoSelection()">
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Field Resolution Outcome</label>
+                <select id="resolve-outcome">
+                  <option value="found">✅ Verified Found & Rescued (Close Case)</option>
+                  <option value="not-found">⚠️ Not Found at Location (Expand Search)</option>
+                  <option value="false-alarm">❌ False Alarm / Mismatch</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Responder Notes</label>
+                <textarea id="resolve-notes" rows="3" placeholder="Enter notes: physical condition, reunited with family, medical support provided..."></textarea>
+              </div>
+
+              <button type="submit" class="btn btn-success" style="width: 100%; padding: 0.65rem;">
+                Submit Field Report & Close Case
+              </button>
+            </form>
+
+            <div id="resolve-msg" style="margin-top: 1rem; font-size: 0.85rem; display: none;"></div>
           </div>
-
-          <form onsubmit="handleResolve(event)">
-            <div class="form-group">
-              <label>Select Case</label>
-              <select id="resolve-case-id" onchange="updateNgoSelection()">
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label>Field Resolution Outcome</label>
-              <select id="resolve-outcome">
-                <option value="found">✅ Verified Found & Rescued (Close Case)</option>
-                <option value="not-found">⚠️ Not Found at Location (Expand Search)</option>
-                <option value="false-alarm">❌ False Alarm / Mismatch</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label>Responder Notes</label>
-              <textarea id="resolve-notes" rows="3" placeholder="Enter notes: physical condition, reunited with family, medical support provided..."></textarea>
-            </div>
-
-            <button type="submit" class="btn btn-success" style="width: 100%; padding: 0.65rem;">
-              Submit Field Report & Close Case
-            </button>
-          </form>
-
-          <div id="resolve-msg" style="margin-top: 1rem; font-size: 0.85rem; display: none;"></div>
         </div>
       </div>
+
     </div>
+
+    <footer style="background: var(--header-bg); border-top: 1px solid var(--card-border); padding: 1rem; text-align: center; font-size: 0.8rem; color: var(--text-muted); margin-top: auto;">
+      Missing Person Search-and-Track System &bull; Problem Statement 112 &bull; Registered Numbers: 25091A32M7, 25091A3222
+    </footer>
 
   </div>
 
-  <footer style="background: #040812; border-top: 1px solid var(--card-border); padding: 1rem; text-align: center; font-size: 0.8rem; color: var(--text-muted);">
-    Missing Person Search-and-Track System &bull; Problem Statement 112 &bull; Registered Numbers: 25091A32M7, 25091A3222
-  </footer>
+  <div id="toast-msg"></div>
 
   <script>
     let allCases = [];
     let currentFilter = 'ALL';
+    let searchQuery = '';
+    let currentRole = 'admin';
     let adminMap = null;
     let ngoMap = null;
     let adminLayers = null;
     let ngoLayers = null;
 
+    // THEME HANDLING (DARK / LIGHT)
+    function initTheme() {
+      const saved = localStorage.getItem('mptracker_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', saved);
+    }
+
+    function toggleTheme() {
+      const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+      const next = cur === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('mptracker_theme', next);
+      showToast(`Switched to ${next.toUpperCase()} mode`);
+    }
+
+    // TOAST NOTIFICATION
+    function showToast(msg) {
+      const t = document.getElementById('toast-msg');
+      t.innerText = msg;
+      t.style.display = 'block';
+      setTimeout(() => { t.style.display = 'none'; }, 2800);
+    }
+
+    // AUTHENTICATION & LOGIN PAGE
+    function selectLoginRole(role) {
+      document.getElementById('login-role-admin').classList.toggle('active', role === 'admin');
+      document.getElementById('login-role-ngo').classList.toggle('active', role === 'ngo');
+      
+      const userInp = document.getElementById('login-user');
+      const passInp = document.getElementById('login-pass');
+      const lbl = document.getElementById('lbl-username');
+
+      if (role === 'admin') {
+        userInp.value = 'admin';
+        passInp.value = 'admin123';
+        lbl.innerText = 'Command Center ID / Username';
+      } else {
+        userInp.value = 'ngo_team';
+        passInp.value = 'rescue123';
+        lbl.innerText = 'Search Party / NGO Unit ID';
+      }
+    }
+
+    function handleLoginSubmit(e) {
+      e.preventDefault();
+      const isAdmin = document.getElementById('login-role-admin').classList.contains('active');
+      const role = isAdmin ? 'admin' : 'ngo';
+      
+      // Transition from Login Screen to Dashboard
+      document.getElementById('screen-login').style.display = 'none';
+      document.getElementById('screen-app').style.display = 'flex';
+      
+      switchView(role);
+      showToast(`Welcome back, ${role === 'admin' ? 'Police Command Officer' : 'Field Search Party'}`);
+    }
+
+    function handleLogout() {
+      document.getElementById('screen-app').style.display = 'none';
+      document.getElementById('screen-login').style.display = 'flex';
+      showToast('Logged out successfully');
+    }
+
+    // MAP INITIALIZATION
     function initMaps() {
       if (!adminMap) {
         adminMap = L.map('admin-map').setView([15.828, 78.045], 14);
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(adminMap);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap' }).addTo(adminMap);
         adminLayers = L.layerGroup().addTo(adminMap);
       }
       if (!ngoMap) {
         ngoMap = L.map('ngo-map').setView([15.832, 78.044], 14);
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(ngoMap);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap' }).addTo(ngoMap);
         ngoLayers = L.layerGroup().addTo(ngoMap);
       }
     }
@@ -704,9 +900,7 @@ HTML_APP = """<!DOCTYPE html>
         document.getElementById('cnt-active').innerText = data.active_cases;
         document.getElementById('cnt-closed').innerText = data.closed_cases;
         document.getElementById('cnt-dispatches').innerText = data.en_route_dispatches;
-      } catch (e) {
-        console.error(e);
-      }
+      } catch (e) { console.error(e); }
     }
 
     async function loadCases() {
@@ -715,9 +909,7 @@ HTML_APP = """<!DOCTYPE html>
         allCases = await res.json();
         renderCasesTable();
         populateNgoCaseSelector();
-      } catch (e) {
-        console.error(e);
-      }
+      } catch (e) { console.error(e); }
     }
 
     function renderCasesTable() {
@@ -725,13 +917,21 @@ HTML_APP = """<!DOCTYPE html>
       tbody.innerHTML = '';
       
       const filtered = allCases.filter(c => {
-        if (currentFilter === 'ACTIVE') return c.status === 'ACTIVE';
-        if (currentFilter === 'RESOLVED') return c.status === 'RESCUED' || c.status === 'CLOSED';
-        return true;
+        const matchesFilter = (currentFilter === 'ALL') || 
+                              (currentFilter === 'ACTIVE' && c.status === 'ACTIVE') ||
+                              (currentFilter === 'RESOLVED' && (c.status === 'RESCUED' || c.status === 'CLOSED'));
+        
+        if (!matchesFilter) return false;
+        if (!searchQuery) return true;
+
+        const q = searchQuery.toLowerCase();
+        return c.name.toLowerCase().includes(q) ||
+               (c.clothes && c.clothes.toLowerCase().includes(q)) ||
+               (c.last_seen_location && c.last_seen_location.toLowerCase().includes(q));
       });
 
       if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:1.5rem;">No cases found in this view.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:1.5rem;">No matching cases found.</td></tr>`;
         return;
       }
 
@@ -747,9 +947,9 @@ HTML_APP = """<!DOCTYPE html>
 
         tr.innerHTML = `
           <td>#${c.id}</td>
-          <td style="font-weight: 700; color: #fff;">${c.name}</td>
+          <td style="font-weight: 700; color: var(--text);">${c.name}</td>
           <td>${c.age} / ${c.gender}</td>
-          <td style="color: #cbd5e1;">${c.clothes || 'Standard'}</td>
+          <td style="color: var(--text-muted);">${c.clothes || 'Standard'}</td>
           <td><b>${c.last_seen_location}</b></td>
           <td><span class="tag ${statusClass}">${c.status}</span></td>
           <td>${c.assigned_team}</td>
@@ -757,6 +957,11 @@ HTML_APP = """<!DOCTYPE html>
         `;
         tbody.appendChild(tr);
       });
+    }
+
+    function handleSearchCases(e) {
+      searchQuery = e.target.value.trim();
+      renderCasesTable();
     }
 
     function filterCases(filter) {
@@ -811,12 +1016,10 @@ HTML_APP = """<!DOCTYPE html>
             radius: 7, color: color, fillColor: color, fillOpacity: 0.9, weight: 2
           }).addTo(adminLayers);
         });
-      } catch (e) {
-        console.error(e);
-      }
+      } catch (e) { console.error(e); }
     }
 
-    // Street-level routing through road network using OSRM
+    // STREET-LEVEL ROAD ROUTING USING OPENSTREETMAP OSRM
     async function loadNgoRoute() {
       initMaps();
       try {
@@ -853,14 +1056,13 @@ HTML_APP = """<!DOCTYPE html>
 
           if (osrmData && osrmData.routes && osrmData.routes.length > 0) {
             const route = osrmData.routes[0];
-            // Convert GeoJSON [lon, lat] to Leaflet [lat, lon]
             streetCoordinates = route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
             const roadDistKm = (route.distance / 1000).toFixed(2);
             const roadEtaMins = (route.duration / 60).toFixed(1);
 
             document.getElementById('route-dist').innerText = `${roadDistKm} km`;
             document.getElementById('route-eta').innerText = `${roadEtaMins} mins`;
-            document.getElementById('route-engine-badge').innerText = `OpenStreetMap Real Road Network (${streetCoordinates.length} street nodes)`;
+            document.getElementById('route-engine-badge').innerText = `OpenStreetMap Real Road Network (${streetCoordinates.length} road coordinates)`;
             document.getElementById('route-path-text').innerText = `Road route navigating through ${streetCoordinates.length} turn segments to target`;
           }
         } catch (osrmErr) {
@@ -870,7 +1072,7 @@ HTML_APP = """<!DOCTYPE html>
           }
         }
 
-        // Draw street-following polyline with high visibility
+        // Draw street-following polyline
         const roadPoly = L.polyline(streetCoordinates, {
           color: '#38bdf8',
           weight: 6,
@@ -879,7 +1081,6 @@ HTML_APP = """<!DOCTYPE html>
           lineJoin: 'round'
         }).addTo(ngoLayers);
 
-        // Fit map bounds to show complete street route
         ngoMap.fitBounds(roadPoly.getBounds(), { padding: [45, 45] });
 
       } catch (e) {
@@ -888,6 +1089,7 @@ HTML_APP = """<!DOCTYPE html>
     }
 
     function switchView(role) {
+      currentRole = role;
       document.getElementById('tab-admin').classList.toggle('active', role === 'admin');
       document.getElementById('tab-ngo').classList.toggle('active', role === 'ngo');
       document.getElementById('view-admin').style.display = role === 'admin' ? 'block' : 'none';
@@ -906,10 +1108,6 @@ HTML_APP = """<!DOCTYPE html>
         setTimeout(() => ngoMap && ngoMap.invalidateSize(), 200);
       }
     }
-
-    function openLoginModal() { document.getElementById('login-modal').style.display = 'flex'; }
-    function closeLoginModal() { document.getElementById('login-modal').style.display = 'none'; }
-    function quickLogin(role) { closeLoginModal(); switchView(role); }
 
     function openAddCaseModal() { document.getElementById('add-case-modal').style.display = 'flex'; }
     function closeAddCaseModal() { document.getElementById('add-case-modal').style.display = 'none'; }
@@ -933,11 +1131,10 @@ HTML_APP = """<!DOCTYPE html>
         });
         closeAddCaseModal();
         e.target.reset();
+        showToast(`Case enrolled for ${newCase.name}`);
         loadStats();
         loadCases();
-      } catch (err) {
-        console.error(err);
-      }
+      } catch (err) { console.error(err); }
     }
 
     async function deleteCase(id) {
@@ -948,11 +1145,10 @@ HTML_APP = """<!DOCTYPE html>
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: id })
         });
+        showToast(`Case #${id} removed`);
         loadStats();
         loadCases();
-      } catch (err) {
-        console.error(err);
-      }
+      } catch (err) { console.error(err); }
     }
 
     async function markCaseResolved(id) {
@@ -962,11 +1158,10 @@ HTML_APP = """<!DOCTYPE html>
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ case_id: id, outcome: 'found', notes: 'Resolved by command' })
         });
+        showToast(`Case #${id} marked as RESCUED`);
         loadStats();
         loadCases();
-      } catch (err) {
-        console.error(err);
-      }
+      } catch (err) { console.error(err); }
     }
 
     async function handleResolve(e) {
@@ -986,11 +1181,10 @@ HTML_APP = """<!DOCTYPE html>
         msg.style.display = 'block';
         msg.className = 'match-alert';
         msg.innerHTML = `<b>Status Updated:</b> Case #${caseId} marked as <b>${result.case_status}</b>. Counters updated.`;
+        showToast(`Case #${caseId} updated to ${result.case_status}`);
         loadStats();
         loadCases();
-      } catch (err) {
-        console.error(err);
-      }
+      } catch (err) { console.error(err); }
     }
 
     // Video Player & Scanner Functions
@@ -1001,6 +1195,7 @@ HTML_APP = """<!DOCTYPE html>
       video.src = URL.createObjectURL(file);
       document.getElementById('video-placeholder').style.display = 'none';
       video.play();
+      showToast(`Loaded video: ${file.name}`);
     }
 
     function loadSampleVideo() {
@@ -1008,6 +1203,7 @@ HTML_APP = """<!DOCTYPE html>
       video.src = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
       document.getElementById('video-placeholder').style.display = 'none';
       video.play();
+      showToast('Loaded demo video feed');
     }
 
     function startVideoScan() {
@@ -1039,7 +1235,6 @@ HTML_APP = """<!DOCTYPE html>
           Auto-Dispatch: Nearest team <b>Helping Hands NGO</b> mobilized to <b>${selectedCamKey}</b> via street navigation.
         `;
 
-        // Update backend dispatch to point to this selected camera location
         await fetch('/api/scan', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
@@ -1059,12 +1254,14 @@ HTML_APP = """<!DOCTYPE html>
         ctx.font = 'bold 13px sans-serif';
         ctx.fillText(`${matchPerson} @ ${selectedCamKey}`, canvas.width * 0.38, canvas.height * 0.25 - 6);
 
+        showToast(`Match detected: ${matchPerson}`);
         loadStats();
         loadCases();
       }, 2500);
     }
 
     window.addEventListener('DOMContentLoaded', () => {
+      initTheme();
       initMaps();
       loadStats();
       loadCases();
@@ -1123,7 +1320,7 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             self._send_json(data)
             return
 
-        # Default HTML
+        # Default HTML application
         html_bytes = HTML_APP.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1143,7 +1340,6 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
 
             coords = CAMERA_LOCATIONS.get(cam, {"lat": 15.8281, "lon": 78.0373})
 
-            # Update the dispatch target to this camera location
             if APP_STATE["dispatches"]:
                 APP_STATE["dispatches"][0]["target_location"] = cam
                 APP_STATE["dispatches"][0]["target_lat"] = coords["lat"]
@@ -1151,7 +1347,6 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
                 APP_STATE["dispatches"][0]["person_name"] = pname
                 APP_STATE["dispatches"][0]["case_id"] = cid
 
-            # Update person's last seen location
             for c in APP_STATE["cases"]:
                 if c["id"] == cid:
                     c["last_seen_location"] = cam
