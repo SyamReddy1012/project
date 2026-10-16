@@ -1,0 +1,25 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/venv/Scripts/python.exe",
+  "python.terminal.activateEnvironment": true,
+  "python.testing.unittestArgs": [
+    "-v",
+    "-s",
+    "./tests",
+    "-p",
+    "test_*.py"
+  ],
+  "python.testing.unittestEnabled": true,
+  "python.testing.pytestEnabled": false,
+  "sqltools.connections": [
+    {
+      "name": "FACEPROJECT (PostgreSQL)",
+      "dialect": "PostgreSQL",
+      "server": "localhost",
+      "port": 5432,
+      "database": "FACEPROJECT",
+      "username": "postgres",
+      "askForPassword": false,
+      "password": "change_me_or_prompt"
+    }
+  ]
+}

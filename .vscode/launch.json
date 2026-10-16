@@ -1,0 +1,28 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Run MPTracker Demo",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "mptracker",
+      "args": ["demo", "--geojson", "zones.geojson"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Python: Init PostgreSQL Database",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "mptracker",
+      "args": ["init-db"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Python: Current File",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal"
+    }
+  ]
+}

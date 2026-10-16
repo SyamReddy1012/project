@@ -1,0 +1,32 @@
+services:
+  db:
+    image: pgvector/pgvector:pg15
+    environment:
+      POSTGRES_DB: FACEPROJECT
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    depends_on:
+      - db
+    environment:
+      DB_NAME: FACEPROJECT
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: db
+      DB_PORT: 5432
+      FACE_MODEL: ArcFace
+      FACE_DETECTOR: retinaface
+      COSINE_THRESHOLD: "0.60"
+      FRAME_SKIP: "3"
+    command: ["python", "-m", "mptracker", "demo"]
+    stdin_open: true
+    tty: true
+
+volumes:
+  pgdata:

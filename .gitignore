@@ -1,0 +1,13 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+.pytest_cache/
+matched_*
+*.mp4
+*.avi
+uploads/
+data/photos/
+output/

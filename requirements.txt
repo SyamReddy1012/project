@@ -1,0 +1,7 @@
+numpy
+opencv-python
+psycopg2-binary
+pgvector
+deepface
+tf-keras
+

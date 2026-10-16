@@ -1,0 +1,57 @@
+"""Configuration loaded from environment variables / .env (no secrets in code)."""
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+
+
+def _load_dotenv(path: str = ".env") -> None:
+    if not os.path.exists(path):
+        return
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+@dataclass(frozen=True)
+class Settings:
+    db_name: str
+    db_user: str
+    db_password: str
+    db_host: str
+    db_port: int
+    model_name: str
+    detector_backend: str
+    cosine_threshold: float
+    frame_skip: int
+    min_face_px: int = 28
+
+    @property
+    def db_kwargs(self) -> dict:
+        return {
+            "dbname": self.db_name,
+            "user": self.db_user,
+            "password": self.db_password,
+            "host": self.db_host,
+            "port": self.db_port,
+        }
+
+
+def get_settings() -> Settings:
+    _load_dotenv()
+    env = os.environ.get
+    return Settings(
+        db_name=env("DB_NAME", "FACEPROJECT"),
+        db_user=env("DB_USER", "postgres"),
+        db_password=env("DB_PASSWORD", ""),
+        db_host=env("DB_HOST", "localhost"),
+        db_port=int(env("DB_PORT", "5432")),
+        model_name=env("FACE_MODEL", "ArcFace"),
+        detector_backend=env("FACE_DETECTOR", "retinaface"),
+        cosine_threshold=float(env("COSINE_THRESHOLD", "0.60")),
+        frame_skip=int(env("FRAME_SKIP", "3")),
+    )

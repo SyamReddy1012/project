@@ -1,0 +1,105 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          78.042,
+          15.831
+        ]
+      },
+      "properties": {
+        "rank": 1,
+        "location": "Kurnool City Railway",
+        "lat": 15.831,
+        "lon": 78.042,
+        "score": 0.2388,
+        "distance_km": 0.55,
+        "radius_km": 1.98,
+        "reason": "0.5 km from last sighting, reachable in 11 min"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          78.045,
+          15.835
+        ]
+      },
+      "properties": {
+        "rank": 2,
+        "location": "Budhwarpet Market",
+        "lat": 15.835,
+        "lon": 78.045,
+        "score": 0.2378,
+        "distance_km": 0.0,
+        "radius_km": 2.25,
+        "reason": "last confirmed sighting"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          78.0373,
+          15.8281
+        ]
+      },
+      "properties": {
+        "rank": 3,
+        "location": "Kurnool Bus Stand",
+        "lat": 15.8281,
+        "lon": 78.0373,
+        "score": 0.1585,
+        "distance_km": 1.13,
+        "radius_km": 1.69,
+        "reason": "1.1 km from last sighting, reachable in 23 min"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          78.045,
+          15.82
+        ]
+      },
+      "properties": {
+        "rank": 4,
+        "location": "Collectorate",
+        "lat": 15.82,
+        "lon": 78.045,
+        "score": 0.1286,
+        "distance_km": 1.67,
+        "radius_km": 1.42,
+        "reason": "1.7 km from last sighting, reachable in 33 min"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          78.056,
+          15.834
+        ]
+      },
+      "properties": {
+        "rank": 5,
+        "location": "Konda Reddy Fort",
+        "lat": 15.834,
+        "lon": 78.056,
+        "score": 0.1145,
+        "distance_km": 1.18,
+        "radius_km": 1.66,
+        "reason": "1.2 km from last sighting, reachable in 24 min"
+      }
+    }
+  ]
+}

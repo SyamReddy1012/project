@@ -1,0 +1,13 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.debugpy",
+    "ms-python.vscode-pylance",
+    "ms-toolsai.jupyter",
+    "ckolkman.vscode-postgres",
+    "mtxr.sqltools",
+    "mtxr.sqltools-driver-pg",
+    "mikestead.dotenv",
+    "RandomFractalsInc.geo-data-viewer"
+  ]
+}
