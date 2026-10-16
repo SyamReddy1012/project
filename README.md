@@ -47,6 +47,7 @@ instead of ad hoc.
 ```bash
 git clone <your-repo-url> && cd missing-person-tracker
 python -m mptracker demo --geojson zones.geojson     # drop zones.geojson on https://geojson.io
+python -m mptracker web                             # interactive web dashboard (http://localhost:10000)
 python -m unittest discover -s tests -v
 ```
 

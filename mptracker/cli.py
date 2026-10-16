@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 import sys
 
 from . import dispatch as dsp
@@ -31,6 +32,12 @@ def cmd_demo(args) -> None:
         with open(args.geojson, "w", encoding="utf-8") as fh:
             fh.write(zones_to_geojson(zones))
         print(f"\nGeoJSON written to {args.geojson}")
+
+
+def cmd_web(args) -> None:
+    from .web import run_server
+    port = args.port or int(os.environ.get("PORT", 10000))
+    run_server(host=args.host, port=port)
 
 
 def cmd_init_db(args) -> None:
@@ -139,6 +146,11 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--top", type=int, default=5)
     d.add_argument("--geojson")
     d.set_defaults(func=cmd_demo)
+
+    w = sub.add_parser("web", help="Start web dashboard server")
+    w.add_argument("--port", type=int, default=None, help="Port to listen on (default: $PORT or 10000)")
+    w.add_argument("--host", default="0.0.0.0", help="Host address to bind (default: 0.0.0.0)")
+    w.set_defaults(func=cmd_web)
 
     sub.add_parser("init-db", help="Create tables").set_defaults(func=cmd_init_db)
 
