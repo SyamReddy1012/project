@@ -12,7 +12,7 @@ import heapq
 import math
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Set
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from .models import Location, Person
 
@@ -94,6 +94,36 @@ class SightingGraph:
                     dist[v] = nd
                     heapq.heappush(heap, (nd, v))
         return dist
+
+    def shortest_path(self, source: int, target: int) -> Tuple[List[int], float]:
+        """Dijkstra shortest path and distance between source and target."""
+        if source == target:
+            return [source], 0.0
+        dist = {source: 0.0}
+        prev: Dict[int, int] = {}
+        heap = [(0.0, source)]
+        while heap:
+            d, u = heapq.heappop(heap)
+            if u == target:
+                break
+            if d > dist.get(u, math.inf):
+                continue
+            for v, edge in self._adj[u].items():
+                nd = d + edge.distance_km
+                if nd < dist.get(v, math.inf):
+                    dist[v] = nd
+                    prev[v] = u
+                    heapq.heappush(heap, (nd, v))
+        if target not in dist:
+            return [], math.inf
+        path = []
+        curr = target
+        while curr in prev:
+            path.append(curr)
+            curr = prev[curr]
+        path.append(source)
+        path.reverse()
+        return path, dist[target]
 
     def transition_probs(self, node: int, allowed: Optional[Set[int]] = None) -> Dict[int, float]:
         """P(next location | current). Favours near nodes and frequently travelled edges."""

@@ -79,6 +79,24 @@ class CoreTests(unittest.TestCase):
         self.assertIn("geojson", data)
         self.assertEqual(data["geojson"]["type"], "FeatureCollection")
 
+    def test_shortest_path_and_stats(self):
+        from mptracker.web import _calculate_shortest_route, _get_app_stats
+        g, _, _ = build_demo()
+        path, dist = g.shortest_path(1, 2)
+        self.assertEqual(path[0], 1)
+        self.assertEqual(path[-1], 2)
+        self.assertGreater(dist, 0.0)
+
+        route = _calculate_shortest_route(15.8310, 78.0420, 15.8350, 78.0450)
+        self.assertIn("distance_km", route)
+        self.assertIn("eta_minutes", route)
+        self.assertGreater(len(route["waypoints"]), 0)
+
+        stats = _get_app_stats()
+        self.assertIn("total_cases", stats)
+        self.assertIn("active_cases", stats)
+        self.assertIn("closed_cases", stats)
+
 
 if __name__ == "__main__":
     unittest.main()
