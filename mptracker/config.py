@@ -44,12 +44,28 @@ class Settings:
 def get_settings() -> Settings:
     _load_dotenv()
     env = os.environ.get
+    db_url = env("DATABASE_URL", "").strip()
+    if db_url:
+        import urllib.parse
+        p = urllib.parse.urlparse(db_url)
+        db_name = p.path.lstrip("/") or env("DB_NAME", "FACEPROJECT")
+        db_user = p.username or env("DB_USER", "postgres")
+        db_password = p.password or env("DB_PASSWORD", "")
+        db_host = p.hostname or env("DB_HOST", "localhost")
+        db_port = p.port or int(env("DB_PORT", "5432"))
+    else:
+        db_name = env("DB_NAME", "FACEPROJECT")
+        db_user = env("DB_USER", "postgres")
+        db_password = env("DB_PASSWORD", "")
+        db_host = env("DB_HOST", "localhost")
+        db_port = int(env("DB_PORT", "5432"))
+
     return Settings(
-        db_name=env("DB_NAME", "FACEPROJECT"),
-        db_user=env("DB_USER", "postgres"),
-        db_password=env("DB_PASSWORD", ""),
-        db_host=env("DB_HOST", "localhost"),
-        db_port=int(env("DB_PORT", "5432")),
+        db_name=db_name,
+        db_user=db_user,
+        db_password=db_password,
+        db_host=db_host,
+        db_port=db_port,
         model_name=env("FACE_MODEL", "ArcFace"),
         detector_backend=env("FACE_DETECTOR", "retinaface"),
         cosine_threshold=float(env("COSINE_THRESHOLD", "0.60")),

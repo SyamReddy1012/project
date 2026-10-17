@@ -18,9 +18,23 @@ import urllib.request
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from .db import (
+    ensure_db_schema,
+    load_cases_from_db,
+    save_case_to_db,
+    delete_case_from_db,
+    load_teams_from_db,
+    save_team_to_db,
+    delete_team_from_db,
+    save_sighting_to_db,
+    save_dispatch_to_db,
+    resolve_dispatch_in_db,
+    load_dispatches_from_db,
+)
 from .demo import build_demo, PLACES
 from .graph import SightingGraph
 from .models import GeoPoint, Location
+
 
 
 # Real surveillance & landmark locations in Kurnool area
@@ -244,6 +258,26 @@ APP_STATE = {
         }
     ],
 }
+
+
+def _sync_db_with_state() -> None:
+    try:
+        ensure_db_schema()
+        db_cases = load_cases_from_db()
+        if db_cases:
+            APP_STATE["cases"] = db_cases
+        db_teams = load_teams_from_db()
+        if db_teams:
+            APP_STATE["teams"] = db_teams
+        db_dispatches = load_dispatches_from_db()
+        if db_dispatches:
+            APP_STATE["dispatches"] = db_dispatches
+    except Exception as exc:
+        print(f"[!] PostgreSQL sync warning: {exc}")
+
+
+_sync_db_with_state()
+
 
 
 def _format_phone_number(raw_phone: str) -> str:
@@ -2136,11 +2170,24 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/teams":
+            db_teams = load_teams_from_db()
+            if db_teams:
+                APP_STATE["teams"] = db_teams
             self._send_json(APP_STATE["teams"])
             return
 
         if path == "/api/cases":
+            db_cases = load_cases_from_db()
+            if db_cases:
+                APP_STATE["cases"] = db_cases
             self._send_json(APP_STATE["cases"])
+            return
+
+        if path == "/api/dispatches":
+            db_dispatches = load_dispatches_from_db()
+            if db_dispatches:
+                APP_STATE["dispatches"] = db_dispatches
+            self._send_json(APP_STATE["dispatches"])
             return
 
         if path == "/api/search-party-route":
@@ -2233,7 +2280,7 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
                 "id": new_id,
                 "name": body.get("name", "New Rescue Team"),
                 "org": body.get("org", "NGO"),
-                "phone": body.get("phone", "N/A"),
+                "phone": body.get("phone", "6303126628"),
                 "base_location": body.get("base_location", "Kurnool"),
                 "lat": float(body.get("lat", 15.8350)),
                 "lon": float(body.get("lon", 78.0450)),
@@ -2241,29 +2288,77 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
                 "password": body.get("password", "ngo123").strip(),
                 "available": True,
             }
-            APP_STATE["teams"].append(entry)
-            self._send_json(entry, status=201)
+            saved_entry = save_team_to_db(entry)
+            APP_STATE["teams"].append(saved_entry)
+            self._send_json(saved_entry, status=201)
             return
 
         if parsed.path == "/api/teams/delete":
-            tid = body.get("id")
+            tid = int(body.get("id", 0))
+            delete_team_from_db(tid)
             APP_STATE["teams"] = [t for t in APP_STATE["teams"] if t["id"] != tid]
             self._send_json({"deleted": tid, "status": "success"})
             return
 
         if parsed.path == "/api/scan":
             cam = body.get("camera_location", "CAR STAND")
-            cid = body.get("case_id", 1)
+            cid = int(body.get("case_id", 1))
             pname = body.get("person_name", "N.K.SYAM")
 
             coords = CAMERA_LOCATIONS.get(cam, {"lat": 15.8281, "lon": 78.0373})
 
+            # Record camera sighting into PostgreSQL person_sightings & update missing_persons
+            sighting_id = save_sighting_to_db(
+                case_id=cid,
+                camera_name=cam,
+                lat=coords["lat"],
+                lon=coords["lon"],
+                video_source=body.get("video_source", "Surveillance CCTV"),
+                confidence_dist=float(body.get("confidence", 0.28)),
+            )
+
+            # Auto-assign dispatch in DB
+            target_team = APP_STATE["teams"][0] if APP_STATE["teams"] else {"id": 1, "name": "Helping Hands NGO", "lat": 15.8350, "lon": 78.0450}
+            avail = [t for t in APP_STATE["teams"] if t.get("available", True)]
+            if avail:
+                target_team = avail[0]
+
+            route = _calculate_shortest_route(
+                target_team.get("lat", 15.8350), target_team.get("lon", 78.0450),
+                coords["lat"], coords["lon"],
+            )
+            dist_km = route.get("distance_km", 1.74)
+            eta_min = route.get("eta_minutes", 2.8)
+
+            disp_id = save_dispatch_to_db(
+                case_id=cid,
+                team_id=target_team.get("id", 1),
+                location_name=cam,
+                distance_km=dist_km,
+                eta_minutes=eta_min,
+                status="EN_ROUTE",
+                notes=f"Surveillance match detected at {cam}",
+            )
+
+            disp_record = {
+                "id": disp_id or 101,
+                "case_id": cid,
+                "person_name": pname,
+                "team_id": target_team.get("id", 1),
+                "team_name": target_team.get("name", "Helping Hands NGO"),
+                "target_location": cam,
+                "target_lat": coords["lat"],
+                "target_lon": coords["lon"],
+                "team_lat": target_team.get("lat", 15.8350),
+                "team_lon": target_team.get("lon", 78.0450),
+                "distance_km": dist_km,
+                "eta_minutes": eta_min,
+                "status": "EN_ROUTE",
+            }
             if APP_STATE["dispatches"]:
-                APP_STATE["dispatches"][0]["target_location"] = cam
-                APP_STATE["dispatches"][0]["target_lat"] = coords["lat"]
-                APP_STATE["dispatches"][0]["target_lon"] = coords["lon"]
-                APP_STATE["dispatches"][0]["person_name"] = pname
-                APP_STATE["dispatches"][0]["case_id"] = cid
+                APP_STATE["dispatches"][0] = disp_record
+            else:
+                APP_STATE["dispatches"].append(disp_record)
 
             for c in APP_STATE["cases"]:
                 if c["id"] == cid:
@@ -2276,18 +2371,19 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
                 "matched_person": pname,
                 "camera_location": cam,
                 "lat": coords["lat"],
-                "lon": coords["lon"]
+                "lon": coords["lon"],
+                "sighting_id": sighting_id,
+                "dispatch_id": disp_id,
             })
             return
 
+
         if parsed.path == "/api/cases/add":
-            new_id = max([c["id"] for c in APP_STATE["cases"]], default=0) + 1
             loc_name = body.get("last_seen_location", "CAR STAND")
             coords = CAMERA_LOCATIONS.get(loc_name, {"lat": 15.8281, "lon": 78.0373})
             assigned_team_name = body.get("assigned_team", "Helping Hands NGO")
 
             entry = {
-                "id": new_id,
                 "name": body.get("name", "Unnamed Case"),
                 "age": body.get("age", 20),
                 "gender": body.get("gender", "Unknown"),
@@ -2299,14 +2395,15 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
                 "lat": coords["lat"],
                 "lon": coords["lon"],
             }
-            APP_STATE["cases"].insert(0, entry)
+            saved_entry = save_case_to_db(entry)
+            APP_STATE["cases"].insert(0, saved_entry)
 
             # Auto-dispatch notification + simulated SMS to the allotted NGO
             target_team = next((t for t in APP_STATE["teams"] if t["name"] == assigned_team_name), None)
             if target_team:
-                _send_case_allotment_notification(entry, target_team, "New case enrolled and allotted by Police Command.")
+                _send_case_allotment_notification(saved_entry, target_team, "New case enrolled and allotted by Police Command.")
 
-            self._send_json(entry, status=201)
+            self._send_json(saved_entry, status=201)
             return
 
         if parsed.path == "/api/cases/allot":
@@ -2337,12 +2434,28 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             target_case["assigned_team"] = target_team["name"]
             notif = _send_case_allotment_notification(target_case, target_team, note, phone_override=custom_phone)
 
+            # Persist allotment & dispatch in PostgreSQL
+            route = _calculate_shortest_route(
+                target_team.get("lat", 15.8350), target_team.get("lon", 78.0450),
+                target_case.get("lat", 15.8281), target_case.get("lon", 78.0373),
+            )
+            disp_id = save_dispatch_to_db(
+                case_id=cid,
+                team_id=target_team["id"],
+                location_name=target_case.get("last_seen_location", "CAR STAND"),
+                distance_km=route.get("distance_km", 1.74),
+                eta_minutes=route.get("eta_minutes", 2.8),
+                status="EN_ROUTE",
+                notes=note,
+            )
+
             self._send_json({
                 "status": "success",
                 "message": f"Case #{cid} ({target_case['name']}) successfully allotted to {target_team['name']}. Alert dispatched to {notif['phone']}!",
                 "notification": notif,
                 "case": target_case,
                 "sms_alert": notif["sms_status"],
+                "dispatch_id": disp_id,
             })
             return
 
@@ -2360,15 +2473,18 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/cases/delete":
-            cid = body.get("id")
+            cid = int(body.get("id", 0))
+            delete_case_from_db(cid)
             APP_STATE["cases"] = [c for c in APP_STATE["cases"] if c["id"] != cid]
             self._send_json({"deleted": cid, "status": "success"})
             return
 
         if parsed.path == "/api/resolve-dispatch":
-            cid = body.get("case_id", 1)
+            cid = int(body.get("case_id", 1))
             outcome = body.get("outcome", "found")
             notes = body.get("notes", "")
+
+            resolve_dispatch_in_db(case_id=cid, outcome=outcome, notes=notes)
 
             new_status = "RESCUED" if outcome == "found" else "CLOSED"
             for c in APP_STATE["cases"]:
@@ -2382,6 +2498,7 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
                 "notes": notes,
             })
             return
+
 
         self._send_json({"error": "Not Found"}, status=404)
 
@@ -2402,6 +2519,7 @@ def _get_demo_data(top_k: int = 5, speed: float | None = None) -> dict:
 
 
 def run_server(host: str = "0.0.0.0", port: int = 10000) -> None:
+    _sync_db_with_state()
     httpd = ThreadingHTTPServer((host, port), MPTrackerHandler)
     print(f"[+] MPTracker Web Dashboard active at http://{host}:{port}")
     try:
