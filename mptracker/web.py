@@ -143,7 +143,7 @@ INITIAL_TEAMS = [
         "base_location": "Budhwarpet Base",
         "lat": 15.8350,
         "lon": 78.0450,
-        "phone": "98765-43210",
+        "phone": "6303126628",
         "username": "helping_hands",
         "password": "ngo123",
         "available": True,
@@ -187,8 +187,8 @@ INITIAL_NOTIFICATIONS = [
         "timestamp": "Today, 14:10",
         "read": False,
         "priority": "HIGH",
-        "phone": "98765-43210",
-        "sms_status": "DELIVERED to +91 98765-43210",
+        "phone": "+91 6303126628",
+        "sms_status": "DELIVERED to +91 6303126628",
     },
     {
         "id": 2,
@@ -246,17 +246,32 @@ APP_STATE = {
 }
 
 
-def _send_case_allotment_notification(case: dict, team: dict, note: str = "") -> dict:
+def _format_phone_number(raw_phone: str) -> str:
+    cleaned = str(raw_phone).strip()
+    digits = "".join(ch for ch in cleaned if ch.isdigit())
+    if len(digits) == 10:
+        return f"+91 {digits}"
+    if len(digits) == 12 and digits.startswith("91"):
+        return f"+91 {digits[2:]}"
+    if cleaned.startswith("+"):
+        return cleaned
+    return f"+91 {cleaned}"
+
+
+def _send_case_allotment_notification(case: dict, team: dict, note: str = "", phone_override: str = "") -> dict:
     """Create and dispatch a real-time notification + simulated SMS to a specific NGO."""
     new_notif_id = max([n["id"] for n in APP_STATE.get("notifications", [])], default=0) + 1
     timestamp = datetime.now().strftime("Today, %H:%M")
+    raw_phone = phone_override or team.get("phone") or "6303126628"
+    formatted_phone = _format_phone_number(raw_phone)
     sms_msg = f"EMERGENCY DISPATCH: Case #{case['id']} ({case['name']}) allotted to {team['name']}. Location: {case.get('last_seen_location', 'N/A')}."
     if note:
         sms_msg += f" Note: {note}"
 
     print(f"\n=======================================================")
-    print(f"[SMS GATEWAY DISPATCH] -> To: +91 {team.get('phone', 'N/A')} ({team['name']})")
+    print(f"[SMS GATEWAY DISPATCH] -> To: {formatted_phone} ({team['name']})")
     print(f"[MESSAGE] {sms_msg}")
+    print(f"[STATUS] DELIVERED (Carrier ACK ID: SMS-IND-6303126628-{new_notif_id:04d})")
     print(f"=======================================================\n")
 
     notif = {
@@ -271,8 +286,8 @@ def _send_case_allotment_notification(case: dict, team: dict, note: str = "") ->
         "timestamp": timestamp,
         "read": False,
         "priority": "HIGH",
-        "phone": team.get("phone", "N/A"),
-        "sms_status": f"DELIVERED to +91 {team.get('phone', 'N/A')}",
+        "phone": formatted_phone,
+        "sms_status": f"DELIVERED to {formatted_phone}",
     }
     APP_STATE["notifications"].insert(0, notif)
     return notif
@@ -824,8 +839,13 @@ HTML_APP = """<!DOCTYPE html>
 
           <div class="form-group">
             <label for="allot-team-select">Assign to NGO / Rescue Team *</label>
-            <select id="allot-team-select" required>
+            <select id="allot-team-select" onchange="handleAllotTeamChange()" required>
             </select>
+          </div>
+
+          <div class="form-group">
+            <label for="allot-phone">📱 Contact Mobile Number for SMS Dispatch Alert *</label>
+            <input type="text" id="allot-phone" value="6303126628" placeholder="e.g. 6303126628" required />
           </div>
 
           <div class="form-group">
@@ -1811,6 +1831,14 @@ HTML_APP = """<!DOCTYPE html>
       document.getElementById('notifications-modal').style.display = 'none';
     }
 
+    function handleAllotTeamChange() {
+      const teamId = parseInt(document.getElementById('allot-team-select').value);
+      const t = allTeams.find(item => item.id === teamId);
+      if (t) {
+        document.getElementById('allot-phone').value = t.phone || '6303126628';
+      }
+    }
+
     function openAllotModal(caseId) {
       const c = allCases.find(item => item.id === caseId);
       if (!c) return;
@@ -1829,6 +1857,7 @@ HTML_APP = """<!DOCTYPE html>
         sel.appendChild(opt);
       });
 
+      handleAllotTeamChange();
       document.getElementById('allot-case-modal').style.display = 'flex';
     }
 
@@ -1841,12 +1870,13 @@ HTML_APP = """<!DOCTYPE html>
       const caseId = parseInt(document.getElementById('allot-case-id').value);
       const teamId = parseInt(document.getElementById('allot-team-select').value);
       const note = document.getElementById('allot-instructions').value.trim();
+      const phone = document.getElementById('allot-phone').value.trim() || '6303126628';
 
       try {
         const res = await fetch('/api/cases/allot', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ case_id: caseId, team_id: teamId, note: note })
+          body: JSON.stringify({ case_id: caseId, team_id: teamId, note: note, phone: phone })
         });
         const data = await res.json();
         closeAllotModal();
@@ -2284,6 +2314,7 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             team_id = int(body.get("team_id", 0))
             team_name = body.get("team_name", "")
             note = body.get("note", "").strip()
+            custom_phone = body.get("phone", "").strip()
 
             target_case = next((c for c in APP_STATE["cases"] if c["id"] == cid), None)
             if not target_case:
@@ -2300,12 +2331,15 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
                 self._send_json({"status": "error", "error": "NGO Team not found"}, status=404)
                 return
 
+            if custom_phone:
+                target_team["phone"] = custom_phone
+
             target_case["assigned_team"] = target_team["name"]
-            notif = _send_case_allotment_notification(target_case, target_team, note)
+            notif = _send_case_allotment_notification(target_case, target_team, note, phone_override=custom_phone)
 
             self._send_json({
                 "status": "success",
-                "message": f"Case #{cid} ({target_case['name']}) successfully allotted to {target_team['name']}.",
+                "message": f"Case #{cid} ({target_case['name']}) successfully allotted to {target_team['name']}. Alert dispatched to {notif['phone']}!",
                 "notification": notif,
                 "case": target_case,
                 "sms_alert": notif["sms_status"],
