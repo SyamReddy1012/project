@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import urllib.parse
+import urllib.request
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -210,7 +211,68 @@ def _get_app_stats():
     }
 
 
+def _fetch_osrm_street_route(from_lat: float, from_lon: float, to_lat: float, to_lon: float) -> dict | None:
+    """Fetch exact real-world turn-by-turn road network coordinates from OpenStreetMap OSRM."""
+    try:
+        url = (
+            f"https://router.project-osrm.org/route/v1/driving/"
+            f"{from_lon:.6f},{from_lat:.6f};{to_lon:.6f},{to_lat:.6f}"
+            f"?overview=full&geometries=geojson"
+        )
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "MPTracker-SearchPartyRouter/1.0 (EmergencyRescueRoute)",
+                "Accept": "application/json",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=4.5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if data.get("code") == "Ok" and data.get("routes"):
+                route = data["routes"][0]
+                # OSRM geojson coordinates are [lon, lat] -> convert to Leaflet [lat, lon]
+                coords = [[c[1], c[0]] for c in route["geometry"]["coordinates"]]
+                dist_km = round(route.get("distance", 0.0) / 1000.0, 2)
+                eta_min = round(route.get("duration", 0.0) / 60.0, 1)
+                return {
+                    "street_coordinates": coords,
+                    "distance_km": dist_km,
+                    "eta_minutes": eta_min,
+                    "engine": f"OSRM Real Road Network ({len(coords)} nodes)",
+                }
+    except Exception as exc:
+        print(f"[OSRM Router] Server-side routing warning: {exc}")
+    return None
+
+
+def _generate_corridor_coordinates(from_lat: float, from_lon: float, to_lat: float, to_lon: float) -> list[list[float]]:
+    """Generate realistic street-following corridor waypoints along street axes if external router is unreachable."""
+    mid_lat = (from_lat + to_lat) / 2.0
+    mid_lon = (from_lon + to_lon) / 2.0
+    return [
+        [from_lat, from_lon],
+        [from_lat, mid_lon],
+        [mid_lat, mid_lon],
+        [mid_lat, to_lon],
+        [to_lat, to_lon],
+    ]
+
+
 def _calculate_shortest_route(from_lat: float, from_lon: float, to_lat: float, to_lon: float):
+    # Try fetching real street geometry via server-side OSRM first
+    osrm_data = _fetch_osrm_street_route(from_lat, from_lon, to_lat, to_lon)
+    if osrm_data and osrm_data.get("street_coordinates"):
+        street_coords = osrm_data["street_coordinates"]
+        dist_km = osrm_data["distance_km"]
+        eta_minutes = osrm_data["eta_minutes"]
+        engine = osrm_data["engine"]
+    else:
+        # Fallback to road-corridor coordinates and SightingGraph
+        street_coords = _generate_corridor_coordinates(from_lat, from_lon, to_lat, to_lon)
+        dist_km = GeoPoint(from_lat, from_lon).distance_km(GeoPoint(to_lat, to_lon))
+        eta_minutes = round((dist_km / 30.0) * 60.0, 1)
+        engine = "Internal Street Corridor Fallback"
+
     graph = SightingGraph()
     for i, name, lat, lon in PLACES:
         graph.add_location(Location(i, name, GeoPoint(lat, lon)))
@@ -229,25 +291,34 @@ def _calculate_shortest_route(from_lat: float, from_lon: float, to_lat: float, t
     start_node = nearest_node(from_lat, from_lon)
     end_node = nearest_node(to_lat, to_lon)
 
-    node_ids, dist_km = graph.shortest_path(start_node, end_node)
-    waypoints = [{"id": graph.location(nid).id, "name": graph.location(nid).name, "lat": graph.location(nid).point.lat, "lon": graph.location(nid).point.lon} for nid in node_ids]
+    node_ids, _ = graph.shortest_path(start_node, end_node)
+    waypoints = [
+        {
+            "id": graph.location(nid).id,
+            "name": graph.location(nid).name,
+            "lat": graph.location(nid).point.lat,
+            "lon": graph.location(nid).point.lon,
+        }
+        for nid in node_ids
+    ]
 
     if not waypoints:
         waypoints = [
             {"id": 0, "name": "Rescue Team Base", "lat": from_lat, "lon": from_lon},
             {"id": 99, "name": "Target Location", "lat": to_lat, "lon": to_lon},
         ]
-        dist_km = GeoPoint(from_lat, from_lon).distance_km(GeoPoint(to_lat, to_lon))
 
     return {
         "distance_km": round(dist_km, 2),
-        "eta_minutes": round((dist_km / 30.0) * 60.0, 1),
+        "eta_minutes": eta_minutes,
         "from_lat": from_lat,
         "from_lon": from_lon,
         "to_lat": to_lat,
         "to_lon": to_lon,
         "waypoints": waypoints,
-        "route_coordinates": [[w["lat"], w["lon"]] for w in waypoints],
+        "route_coordinates": street_coords,
+        "street_coordinates": street_coords,
+        "engine": engine,
     }
 
 
@@ -855,7 +926,7 @@ HTML_APP = """<!DOCTYPE html>
             <div>
               <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.35rem;">
                 <span class="badge" style="background: #ef4444;">ACTIVE SEARCH PARTY DISPATCH</span>
-                <span class="badge" style="background: #10b981;">🚗 Turn-by-Turn Road Route</span>
+                <span class="badge" style="background: #10b981;" id="route-engine-badge">🚗 Turn-by-Turn Road Route</span>
               </div>
               <h2 style="font-size: 1.35rem; color: var(--text);">Shortest Street Route from Base to Target Zone</h2>
               <p style="font-size: 0.85rem; color: var(--text-muted);">
@@ -1228,12 +1299,14 @@ HTML_APP = """<!DOCTYPE html>
 
     function updateNgoSelection() {
       const sel = document.getElementById('resolve-case-id');
+      if (!sel) return;
       const caseId = parseInt(sel.value);
       const c = allCases.find(item => item.id === caseId) || allCases[0];
       if (c) {
         document.getElementById('ngo-subject-name').innerText = c.name;
         document.getElementById('ngo-target-loc').innerText = c.last_seen_location;
         document.getElementById('ngo-tag-status').innerText = `Status: ${c.status}`;
+        loadNgoRoute(c.id);
       }
     }
 
@@ -1265,11 +1338,16 @@ HTML_APP = """<!DOCTYPE html>
     }
 
     // STREET-LEVEL ROAD ROUTING FROM SPECIFIC LOGGED-IN NGO'S BASE
-    async function loadNgoRoute() {
+    async function loadNgoRoute(caseId = null) {
       initMaps();
       try {
-        const teamParam = loggedInTeam ? `?team_id=${loggedInTeam.id}` : '';
-        const res = await fetch(`/api/search-party-route${teamParam}`);
+        const teamParam = loggedInTeam ? `team_id=${loggedInTeam.id}` : '';
+        const selCaseId = caseId || (document.getElementById('resolve-case-id') ? document.getElementById('resolve-case-id').value : '');
+        const caseParam = selCaseId ? `case_id=${selCaseId}` : '';
+        const params = [teamParam, caseParam].filter(Boolean).join('&');
+        const url = `/api/search-party-route${params ? '?' + params : ''}`;
+
+        const res = await fetch(url);
         const data = await res.json();
 
         ngoLayers.clearLayers();
@@ -1279,61 +1357,61 @@ HTML_APP = """<!DOCTYPE html>
         const targetLat = data.to_lat;
         const targetLon = data.to_lon;
 
-        const teamName = loggedInTeam ? loggedInTeam.name : "Helping Hands NGO";
-        const baseName = loggedInTeam ? loggedInTeam.base_location : "Base Station";
+        const teamName = data.team_name || (loggedInTeam ? loggedInTeam.name : "Helping Hands NGO");
+        const baseName = data.base_location || (loggedInTeam ? loggedInTeam.base_location : "Base Station");
+        const personName = data.person_name || document.getElementById('ngo-subject-name').innerText;
+        const locName = data.target_location || document.getElementById('ngo-target-loc').innerText;
 
         document.getElementById('ngo-active-team-display').innerText = `Unit: ${teamName}`;
         document.getElementById('ngo-base-display').innerText = `${baseName} (${startLat.toFixed(4)}, ${startLon.toFixed(4)})`;
+        document.getElementById('ngo-subject-name').innerText = personName;
+        document.getElementById('ngo-target-loc').innerText = locName;
+
+        document.getElementById('route-dist').innerText = `${data.distance_km} km`;
+        document.getElementById('route-eta').innerText = `${data.eta_minutes} mins`;
+        const badge = document.getElementById('route-engine-badge');
+        if (badge) {
+          badge.innerText = `🚗 ${data.engine || 'Real Road Network'}`;
+        }
+        const coordsCount = data.street_coordinates ? data.street_coordinates.length : (data.route_coordinates ? data.route_coordinates.length : 2);
+        document.getElementById('route-path-text').innerText = `Street route navigating through ${coordsCount} road nodes from ${baseName} to ${locName}`;
 
         // Search party base marker
         L.circleMarker([startLat, startLon], {
-          radius: 9, color: '#10b981', fillColor: '#10b981', fillOpacity: 0.9, weight: 3
+          radius: 9, color: '#10b981', fillColor: '#10b981', fillOpacity: 0.95, weight: 3
         }).bindPopup(`<b>${teamName} (Base)</b><br>${baseName}`).addTo(ngoLayers);
 
         // Target sighting location marker
         L.circleMarker([targetLat, targetLon], {
-          radius: 9, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9, weight: 3
-        }).bindPopup(`<b>Target Sighting Location</b><br>${document.getElementById('ngo-target-loc').innerText}`).addTo(ngoLayers);
+          radius: 9, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.95, weight: 3
+        }).bindPopup(`<b>Target Sighting: ${personName}</b><br>${locName}`).addTo(ngoLayers);
 
         L.circle([targetLat, targetLon], {
-          radius: 450, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.18, weight: 2
+          radius: 400, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.18, weight: 2
         }).addTo(ngoLayers);
 
-        // Fetch exact road street coordinates from OpenStreetMap Routing Machine (OSRM)
-        let streetCoordinates = [[startLat, startLon], [targetLat, targetLon]];
-        try {
-          const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${targetLon},${targetLat}?overview=full&geometries=geojson`;
-          const osrmRes = await fetch(osrmUrl);
-          const osrmData = await osrmRes.json();
+        // Real street coordinates provided directly by server (pre-fetched from OSRM)
+        const streetCoordinates = data.street_coordinates || data.route_coordinates || [[startLat, startLon], [targetLat, targetLon]];
 
-          if (osrmData && osrmData.routes && osrmData.routes.length > 0) {
-            const route = osrmData.routes[0];
-            streetCoordinates = route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
-            const roadDistKm = (route.distance / 1000).toFixed(2);
-            const roadEtaMins = (route.duration / 60).toFixed(1);
-
-            document.getElementById('route-dist').innerText = `${roadDistKm} km`;
-            document.getElementById('route-eta').innerText = `${roadEtaMins} mins`;
-            document.getElementById('route-engine-badge').innerText = `OpenStreetMap Real Road Network (${streetCoordinates.length} road coordinates)`;
-            document.getElementById('route-path-text').innerText = `Road route navigating through ${streetCoordinates.length} turn segments from ${baseName} to target`;
-          }
-        } catch (osrmErr) {
-          console.warn("OSRM routing offline, fallback to graph coordinates", osrmErr);
-          if (data.route_coordinates && data.route_coordinates.length) {
-            streetCoordinates = data.route_coordinates;
-          }
-        }
-
-        // Draw street-following polyline
-        const roadPoly = L.polyline(streetCoordinates, {
-          color: '#38bdf8',
-          weight: 6,
-          opacity: 0.9,
+        // Draw dual-layer professional GPS road navigation polyline:
+        // Casing/border line (darker, thick) + core glow road line
+        const casingPoly = L.polyline(streetCoordinates, {
+          color: '#0369a1',
+          weight: 9,
+          opacity: 0.75,
           lineCap: 'round',
           lineJoin: 'round'
         }).addTo(ngoLayers);
 
-        ngoMap.fitBounds(roadPoly.getBounds(), { padding: [45, 45] });
+        const corePoly = L.polyline(streetCoordinates, {
+          color: '#38bdf8',
+          weight: 5,
+          opacity: 1.0,
+          lineCap: 'round',
+          lineJoin: 'round'
+        }).addTo(ngoLayers);
+
+        ngoMap.fitBounds(casingPoly.getBounds(), { padding: [45, 45] });
 
       } catch (e) {
         console.error("Failed to load street route", e);
@@ -1618,17 +1696,27 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
 
         if path == "/api/search-party-route":
             team_id = int(query.get("team_id", [0])[0]) if "team_id" in query else 0
+            case_id = int(query.get("case_id", [0])[0]) if "case_id" in query else 0
+
             team = next((t for t in APP_STATE["teams"] if t["id"] == team_id), None)
             if not team:
-                team = APP_STATE["teams"][0] if APP_STATE["teams"] else {"lat": 15.8350, "lon": 78.0450}
+                team = APP_STATE["teams"][0] if APP_STATE["teams"] else {"name": "Helping Hands NGO", "base_location": "Budhwarpet Base", "lat": 15.8350, "lon": 78.0450}
 
-            active_disp = APP_STATE["dispatches"][0] if APP_STATE["dispatches"] else {}
+            target_case = next((c for c in APP_STATE["cases"] if c["id"] == case_id), None)
+            if not target_case:
+                target_case = APP_STATE["cases"][0] if APP_STATE["cases"] else {}
+
             team_lat = team.get("lat", 15.8350)
             team_lon = team.get("lon", 78.0450)
-            target_lat = active_disp.get("target_lat", 15.8281)
-            target_lon = active_disp.get("target_lon", 78.0373)
+            target_lat = target_case.get("lat", 15.8281)
+            target_lon = target_case.get("lon", 78.0373)
 
             route = _calculate_shortest_route(team_lat, team_lon, target_lat, target_lon)
+            route["case_id"] = target_case.get("id", 1)
+            route["person_name"] = target_case.get("name", "N.K.SYAM")
+            route["target_location"] = target_case.get("last_seen_location", "CAR STAND")
+            route["team_name"] = team.get("name", "Helping Hands NGO")
+            route["base_location"] = team.get("base_location", "Base Station")
             self._send_json(route)
             return
 

@@ -91,6 +91,9 @@ class CoreTests(unittest.TestCase):
         self.assertIn("distance_km", route)
         self.assertIn("eta_minutes", route)
         self.assertGreater(len(route["waypoints"]), 0)
+        self.assertIn("street_coordinates", route)
+        self.assertIn("engine", route)
+        self.assertGreaterEqual(len(route["street_coordinates"]), 2)
 
         stats = _get_app_stats()
         self.assertIn("total_cases", stats)
