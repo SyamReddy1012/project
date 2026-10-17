@@ -96,6 +96,18 @@ class CoreTests(unittest.TestCase):
         self.assertIn("total_cases", stats)
         self.assertIn("active_cases", stats)
         self.assertIn("closed_cases", stats)
+        self.assertIn("total_teams", stats)
+
+    def test_ngo_teams_and_credentials(self):
+        from mptracker.web import APP_STATE
+        teams = APP_STATE["teams"]
+        self.assertGreaterEqual(len(teams), 3)
+        for t in teams:
+            self.assertIn("username", t)
+            self.assertIn("password", t)
+            self.assertIn("base_location", t)
+            self.assertIn("lat", t)
+            self.assertIn("lon", t)
 
 
 if __name__ == "__main__":

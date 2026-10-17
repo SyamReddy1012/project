@@ -1,10 +1,12 @@
 """Interactive web dashboard and API server for MPTracker on Render and local machine.
 Features:
   - Separate Full-Screen Dedicated Login Page (Admin vs NGO Search Party)
+  - Dedicated Login for each NGO / Rescue Team with individual credentials
+  - Add New NGOs / Rescue Teams with Custom Base Locations & Coordinates
+  - Admin NGO Registry & Team Management (Add, View, Remove)
   - Dark & Light Mode Theme Toggle with persistent localStorage
-  - Highly Interactive UI: Live Search, Filter Pills, Toast Notifications, Animated Radar
-  - Camera Location Selector & Custom Video Upload Scanner
-  - Real Street-Level Road Network Routing (OSRM) with step-by-step navigation
+  - Custom Video Upload & Surveillance Camera Location Selector
+  - Real Street-Level Road Network Routing (OSRM) from each NGO's base
   - Add New Case Modal, Delete Resolved Cases, and Live Case Counters
 """
 from __future__ import annotations
@@ -132,18 +134,54 @@ INITIAL_CASES = [
     },
 ]
 
+INITIAL_TEAMS = [
+    {
+        "id": 1,
+        "name": "Helping Hands NGO",
+        "org": "NGO",
+        "base_location": "Budhwarpet Base",
+        "lat": 15.8350,
+        "lon": 78.0450,
+        "phone": "98765-43210",
+        "username": "helping_hands",
+        "password": "ngo123",
+        "available": True,
+    },
+    {
+        "id": 2,
+        "name": "City Police Patrol 1",
+        "org": "Police",
+        "base_location": "Kurnool Town Police Station",
+        "lat": 15.8281,
+        "lon": 78.0373,
+        "phone": "100-000-0001",
+        "username": "police_patrol",
+        "password": "police123",
+        "available": True,
+    },
+    {
+        "id": 3,
+        "name": "Volunteer Unit A",
+        "org": "Volunteer",
+        "base_location": "Nandyal Road Base",
+        "lat": 15.8100,
+        "lon": 78.0600,
+        "phone": "91234-56789",
+        "username": "volunteer_a",
+        "password": "volunteer123",
+        "available": True,
+    },
+]
+
 APP_STATE = {
     "cases": list(INITIAL_CASES),
-    "teams": [
-        {"id": 1, "name": "City Police Patrol 1", "org": "Police", "lat": 15.8281, "lon": 78.0373},
-        {"id": 2, "name": "Helping Hands NGO", "org": "NGO", "lat": 15.8350, "lon": 78.0450},
-        {"id": 3, "name": "Volunteer Unit A", "org": "Volunteer", "lat": 15.8100, "lon": 78.0600},
-    ],
+    "teams": list(INITIAL_TEAMS),
     "dispatches": [
         {
             "id": 101,
             "case_id": 1,
             "person_name": "N.K.SYAM",
+            "team_id": 1,
             "team_name": "Helping Hands NGO",
             "target_location": "CAR STAND",
             "target_lat": 15.8281,
@@ -168,6 +206,7 @@ def _get_app_stats():
         "active_cases": active,
         "closed_cases": closed,
         "en_route_dispatches": sum(1 for d in APP_STATE["dispatches"] if d.get("status") == "EN_ROUTE"),
+        "total_teams": len(APP_STATE["teams"]),
     }
 
 
@@ -262,7 +301,7 @@ HTML_APP = """<!DOCTYPE html>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease; }
     body { background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
 
-    /* SEPARATE FULL-SCREEN LOGIN PAGE */
+    /* SEPARATE FULL-SCREEN DEDICATED LOGIN PAGE */
     #screen-login {
       display: flex;
       align-items: center;
@@ -274,7 +313,7 @@ HTML_APP = """<!DOCTYPE html>
     }
     .login-container {
       width: 100%;
-      max-width: 460px;
+      max-width: 480px;
       background: var(--card);
       border: 1px solid var(--card-border);
       border-radius: 14px;
@@ -401,9 +440,9 @@ HTML_APP = """<!DOCTYPE html>
     .tag-rescued { background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.4); }
     .tag-closed { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); border: 1px solid var(--card-border); }
 
-    /* MODAL */
+    /* MODALS */
     .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 9999; }
-    .modal-box { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; width: 100%; max-width: 480px; padding: 1.75rem; box-shadow: var(--shadow); }
+    .modal-box { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; width: 100%; max-width: 500px; padding: 1.75rem; box-shadow: var(--shadow); }
     .modal-box h2 { font-size: 1.25rem; margin-bottom: 0.4rem; color: var(--text); }
     .form-group { margin-bottom: 0.9rem; display: flex; flex-direction: column; gap: 0.35rem; }
     .form-group label { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; }
@@ -427,7 +466,7 @@ HTML_APP = """<!DOCTYPE html>
         Missing Person Search-and-Track
       </h2>
       <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">
-        Problem Statement 112 &bull; Emergency Command & Field Rescue Portal
+        Problem Statement 112 &bull; Role-Based Emergency & Field Rescue Portal
       </div>
 
       <!-- Quick Role Tabs -->
@@ -436,11 +475,18 @@ HTML_APP = """<!DOCTYPE html>
           👮 Police Command
         </button>
         <button class="role-btn" id="login-role-ngo" onclick="selectLoginRole('ngo')">
-          🚑 NGO Rescue Team
+          🚑 NGO / Search Party
         </button>
       </div>
 
       <form onsubmit="handleLoginSubmit(event)">
+        <!-- Specific NGO Selector when NGO Tab is Active -->
+        <div id="ngo-select-group" class="form-group" style="display: none;">
+          <label>Select Registered NGO / Rescue Unit:</label>
+          <select id="login-ngo-choice" onchange="handleNgoChoiceChange()">
+          </select>
+        </div>
+
         <div class="form-group">
           <label id="lbl-username">Command Center ID / Username</label>
           <input type="text" id="login-user" value="admin" required />
@@ -457,7 +503,7 @@ HTML_APP = """<!DOCTYPE html>
 
       <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-muted);">
         <div>Reg: <b>25091A32M7</b>, <b>25091A3222</b></div>
-        <div>PostgreSQL &bull; ArcFace</div>
+        <div>PostgreSQL &bull; ArcFace &bull; OSRM</div>
       </div>
     </div>
   </div>
@@ -500,16 +546,87 @@ HTML_APP = """<!DOCTYPE html>
             <input type="text" id="new-loc" placeholder="e.g. CAR STAND" required />
           </div>
           <div class="form-group">
-            <label for="new-team">Assigned Response Unit</label>
+            <label for="new-team">Assigned Response Unit (NGO / Team)</label>
             <select id="new-team">
-              <option value="Helping Hands NGO">Helping Hands NGO (Field Response)</option>
-              <option value="City Police Patrol 1">City Police Patrol 1</option>
-              <option value="Volunteer Unit A">Volunteer Unit A</option>
             </select>
           </div>
           <div style="display: flex; gap: 0.75rem; margin-top: 1.25rem;">
             <button type="button" class="btn btn-secondary" onclick="closeAddCaseModal()" style="flex: 1;">Cancel</button>
             <button type="submit" class="btn btn-success" style="flex: 2;">Save Case & Begin Tracking</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Add NGO / Rescue Team Modal -->
+    <div id="add-ngo-modal" class="modal-backdrop" style="display: none;">
+      <div class="modal-box">
+        <h2>+ Register New NGO / Rescue Team</h2>
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1.2rem;">
+          Add a partner NGO or search party with their base coordinates and dedicated login credentials.
+        </p>
+        <form onsubmit="handleCreateNgo(event)">
+          <div class="form-group">
+            <label for="ngo-name">NGO / Team Name *</label>
+            <input type="text" id="ngo-name" placeholder="e.g. Red Cross Kurnool Chapter" required />
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+            <div class="form-group">
+              <label for="ngo-org">Organization Type</label>
+              <select id="ngo-org">
+                <option value="NGO">NGO / Non-Profit</option>
+                <option value="Volunteer">Volunteer Group</option>
+                <option value="Police">Police Task Force</option>
+                <option value="Disaster Relief">Disaster Relief Force</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="ngo-phone">Contact Phone *</label>
+              <input type="text" id="ngo-phone" placeholder="e.g. 98480-12345" required />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="ngo-base-preset">Base Location Area</label>
+            <select id="ngo-base-preset" onchange="handleNgoBasePresetChange()">
+              <option value="Budhwarpet Base|15.8350|78.0450">Budhwarpet Base (15.8350, 78.0450)</option>
+              <option value="Kurnool Town Base|15.8281|78.0373">Kurnool Town Base (15.8281, 78.0373)</option>
+              <option value="Nandyal Road Base|15.8100|78.0600">Nandyal Road Base (15.8100, 78.0600)</option>
+              <option value="Collectorate Base|15.8200|78.0450">Collectorate Base (15.8200, 78.0450)</option>
+              <option value="Railway Station Outpost|15.8310|78.0420">Railway Station Outpost (15.8310, 78.0420)</option>
+              <option value="Tungabhadra North Base|15.8420|78.0300">Tungabhadra North Base (15.8420, 78.0300)</option>
+              <option value="custom">-- Custom Location & Coordinates --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="ngo-base-name">Base Location Label *</label>
+            <input type="text" id="ngo-base-name" value="Budhwarpet Base" required />
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+            <div class="form-group">
+              <label for="ngo-lat">Latitude *</label>
+              <input type="number" step="0.0001" id="ngo-lat" value="15.8350" required />
+            </div>
+            <div class="form-group">
+              <label for="ngo-lon">Longitude *</label>
+              <input type="number" step="0.0001" id="ngo-lon" value="78.0450" required />
+            </div>
+          </div>
+          <div style="background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem;">
+            <div style="font-size: 0.8rem; font-weight: 700; color: var(--accent); margin-bottom: 0.4rem;">🔑 Separate Login Credentials for this NGO:</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="ngo-username">Login Username *</label>
+                <input type="text" id="ngo-username" placeholder="e.g. redcross_kurnool" required />
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="ngo-password">Login Password *</label>
+                <input type="password" id="ngo-password" placeholder="e.g. pass123" required />
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.75rem;">
+            <button type="button" class="btn btn-secondary" onclick="closeAddNgoModal()" style="flex: 1;">Cancel</button>
+            <button type="submit" class="btn btn-success" style="flex: 2;">Register Team & Enable Login</button>
           </div>
         </form>
       </div>
@@ -565,10 +682,10 @@ HTML_APP = """<!DOCTYPE html>
         </div>
         <div class="stat-box">
           <div>
-            <div class="stat-title">Field Dispatches</div>
-            <div class="stat-number c-dispatch" id="cnt-dispatches">0</div>
+            <div class="stat-title">Registered NGOs</div>
+            <div class="stat-number c-dispatch" id="cnt-teams">0</div>
           </div>
-          <div class="stat-icon">📍</div>
+          <div class="stat-icon">🏢</div>
         </div>
       </div>
 
@@ -697,6 +814,36 @@ HTML_APP = """<!DOCTYPE html>
             </table>
           </div>
         </div>
+
+        <!-- NGO / Search Party Management Registry -->
+        <div class="card" style="margin-bottom: 1.5rem;">
+          <div class="card-header">
+            <div class="card-title">🏢 Registered NGOs & Field Search Parties Management</div>
+            <button class="btn btn-success btn-sm" onclick="openAddNgoModal()">+ Register New NGO</button>
+          </div>
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">
+            Manage authorized partner rescue teams, their base station coordinates, and their separate login credentials:
+          </div>
+          <div style="overflow-x: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Team / NGO Name</th>
+                  <th>Type</th>
+                  <th>Base Station Location</th>
+                  <th>Coordinates (Lat, Lon)</th>
+                  <th>Contact Phone</th>
+                  <th>Login Username</th>
+                  <th style="text-align: right;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="teams-table">
+                <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Loading registered teams...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- NGO / SEARCH PARTY VIEW -->
@@ -710,14 +857,14 @@ HTML_APP = """<!DOCTYPE html>
                 <span class="badge" style="background: #ef4444;">ACTIVE SEARCH PARTY DISPATCH</span>
                 <span class="badge" style="background: #10b981;">🚗 Turn-by-Turn Road Route</span>
               </div>
-              <h2 style="font-size: 1.35rem; color: var(--text);">Shortest Street Route to Target Search Zone</h2>
+              <h2 style="font-size: 1.35rem; color: var(--text);">Shortest Street Route from Base to Target Zone</h2>
               <p style="font-size: 0.85rem; color: var(--text-muted);">
                 Assigned Subject: <b id="ngo-subject-name" style="color: var(--text);">N.K.SYAM</b> &bull; Target Location: <b id="ngo-target-loc" style="color: var(--text);">CAR STAND</b>
               </p>
             </div>
             <div class="user-pill">
               <span class="dot role-ngo"></span>
-              <span>Unit: Helping Hands NGO</span>
+              <span id="ngo-active-team-display">Unit: Helping Hands NGO</span>
             </div>
           </div>
 
@@ -731,9 +878,9 @@ HTML_APP = """<!DOCTYPE html>
               <div class="route-val" id="route-eta" style="color: var(--warning);">2.8 mins</div>
             </div>
             <div class="route-item">
-              <div class="route-lbl">Routing Engine</div>
-              <div style="font-size: 0.9rem; color: var(--text); margin-top: 0.2rem;" id="route-engine-badge">
-                OpenStreetMap Real Road Network (OSRM)
+              <div class="route-lbl">Team Base Origin</div>
+              <div style="font-size: 0.9rem; color: var(--text); margin-top: 0.2rem;" id="ngo-base-display">
+                Budhwarpet Base (15.8350, 78.0450)
               </div>
             </div>
             <div class="route-item">
@@ -763,7 +910,7 @@ HTML_APP = """<!DOCTYPE html>
             </div>
 
             <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-              When the search team reaches the search zone, update the field outcome or close the resolved case:
+              When your search team reaches the search zone, update the field outcome or close the resolved case:
             </div>
 
             <form onsubmit="handleResolve(event)">
@@ -809,9 +956,11 @@ HTML_APP = """<!DOCTYPE html>
 
   <script>
     let allCases = [];
+    let allTeams = [];
     let currentFilter = 'ALL';
     let searchQuery = '';
     let currentRole = 'admin';
+    let loggedInTeam = null;
     let adminMap = null;
     let ngoMap = null;
     let adminLayers = null;
@@ -847,34 +996,82 @@ HTML_APP = """<!DOCTYPE html>
       const userInp = document.getElementById('login-user');
       const passInp = document.getElementById('login-pass');
       const lbl = document.getElementById('lbl-username');
+      const ngoGroup = document.getElementById('ngo-select-group');
 
       if (role === 'admin') {
         userInp.value = 'admin';
         passInp.value = 'admin123';
         lbl.innerText = 'Command Center ID / Username';
+        ngoGroup.style.display = 'none';
       } else {
-        userInp.value = 'ngo_team';
-        passInp.value = 'rescue123';
+        ngoGroup.style.display = 'block';
+        handleNgoChoiceChange();
         lbl.innerText = 'Search Party / NGO Unit ID';
       }
     }
 
-    function handleLoginSubmit(e) {
+    function populateLoginNgoChoice() {
+      const sel = document.getElementById('login-ngo-choice');
+      sel.innerHTML = '';
+      allTeams.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.innerText = `${t.name} (${t.base_location})`;
+        sel.appendChild(opt);
+      });
+      if (allTeams.length > 0) {
+        handleNgoChoiceChange();
+      }
+    }
+
+    function handleNgoChoiceChange() {
+      const sel = document.getElementById('login-ngo-choice');
+      const teamId = parseInt(sel.value);
+      const team = allTeams.find(t => t.id === teamId);
+      if (team) {
+        document.getElementById('login-user').value = team.username;
+        document.getElementById('login-pass').value = team.password || 'ngo123';
+      }
+    }
+
+    async function handleLoginSubmit(e) {
       e.preventDefault();
       const isAdmin = document.getElementById('login-role-admin').classList.contains('active');
       const role = isAdmin ? 'admin' : 'ngo';
-      
-      // Transition from Login Screen to Dashboard
-      document.getElementById('screen-login').style.display = 'none';
-      document.getElementById('screen-app').style.display = 'flex';
-      
-      switchView(role);
-      showToast(`Welcome back, ${role === 'admin' ? 'Police Command Officer' : 'Field Search Party'}`);
+      const username = document.getElementById('login-user').value.trim();
+      const password = document.getElementById('login-pass').value.trim();
+
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: role, username: username, password: password })
+        });
+        const data = await res.json();
+
+        if (data.status !== 'success') {
+          alert(data.error || 'Invalid credentials');
+          return;
+        }
+
+        loggedInTeam = data.team || null;
+
+        // Transition from Login Screen to Dashboard
+        document.getElementById('screen-login').style.display = 'none';
+        document.getElementById('screen-app').style.display = 'flex';
+        
+        switchView(role);
+        const nameDisplay = loggedInTeam ? loggedInTeam.name : 'Police Command';
+        showToast(`Welcome back, ${nameDisplay}`);
+      } catch (err) {
+        console.error(err);
+      }
     }
 
     function handleLogout() {
       document.getElementById('screen-app').style.display = 'none';
       document.getElementById('screen-login').style.display = 'flex';
+      loggedInTeam = null;
       showToast('Logged out successfully');
     }
 
@@ -882,12 +1079,12 @@ HTML_APP = """<!DOCTYPE html>
     function initMaps() {
       if (!adminMap) {
         adminMap = L.map('admin-map').setView([15.828, 78.045], 14);
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap' }).addTo(adminMap);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(adminMap);
         adminLayers = L.layerGroup().addTo(adminMap);
       }
       if (!ngoMap) {
         ngoMap = L.map('ngo-map').setView([15.832, 78.044], 14);
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap' }).addTo(ngoMap);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(ngoMap);
         ngoLayers = L.layerGroup().addTo(ngoMap);
       }
     }
@@ -899,8 +1096,56 @@ HTML_APP = """<!DOCTYPE html>
         document.getElementById('cnt-total').innerText = data.total_cases;
         document.getElementById('cnt-active').innerText = data.active_cases;
         document.getElementById('cnt-closed').innerText = data.closed_cases;
-        document.getElementById('cnt-dispatches').innerText = data.en_route_dispatches;
+        document.getElementById('cnt-teams').innerText = data.total_teams;
       } catch (e) { console.error(e); }
+    }
+
+    async function loadTeams() {
+      try {
+        const res = await fetch('/api/teams');
+        allTeams = await res.json();
+        renderTeamsTable();
+        populateCaseTeamDropdown();
+        populateLoginNgoChoice();
+        if (!loggedInTeam && allTeams.length > 0) {
+          loggedInTeam = allTeams[0];
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    function renderTeamsTable() {
+      const tbody = document.getElementById('teams-table');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      allTeams.forEach(t => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>#${t.id}</td>
+          <td style="font-weight: 700; color: var(--text);">${t.name}</td>
+          <td><span class="badge" style="background: #0284c7;">${t.org}</span></td>
+          <td><b>${t.base_location}</b></td>
+          <td style="color: var(--text-muted); font-family: monospace;">${t.lat.toFixed(4)}, ${t.lon.toFixed(4)}</td>
+          <td>${t.phone}</td>
+          <td style="color: var(--accent); font-family: monospace;">${t.username}</td>
+          <td style="text-align: right;">
+            <button class="btn btn-danger btn-sm" onclick="deleteTeam(${t.id})" title="Remove Team">Remove</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function populateCaseTeamDropdown() {
+      const sel = document.getElementById('new-team');
+      if (!sel) return;
+      sel.innerHTML = '';
+      allTeams.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.name;
+        opt.innerText = `${t.name} (${t.base_location})`;
+        sel.appendChild(opt);
+      });
     }
 
     async function loadCases() {
@@ -1019,24 +1264,31 @@ HTML_APP = """<!DOCTYPE html>
       } catch (e) { console.error(e); }
     }
 
-    // STREET-LEVEL ROAD ROUTING USING OPENSTREETMAP OSRM
+    // STREET-LEVEL ROAD ROUTING FROM SPECIFIC LOGGED-IN NGO'S BASE
     async function loadNgoRoute() {
       initMaps();
       try {
-        const res = await fetch('/api/search-party-route');
+        const teamParam = loggedInTeam ? `?team_id=${loggedInTeam.id}` : '';
+        const res = await fetch(`/api/search-party-route${teamParam}`);
         const data = await res.json();
 
         ngoLayers.clearLayers();
 
-        const startLat = data.from_lat || 15.8350;
-        const startLon = data.from_lon || 78.0450;
-        const targetLat = data.to_lat || 15.8281;
-        const targetLon = data.to_lon || 78.0373;
+        const startLat = data.from_lat;
+        const startLon = data.from_lon;
+        const targetLat = data.to_lat;
+        const targetLon = data.to_lon;
+
+        const teamName = loggedInTeam ? loggedInTeam.name : "Helping Hands NGO";
+        const baseName = loggedInTeam ? loggedInTeam.base_location : "Base Station";
+
+        document.getElementById('ngo-active-team-display').innerText = `Unit: ${teamName}`;
+        document.getElementById('ngo-base-display').innerText = `${baseName} (${startLat.toFixed(4)}, ${startLon.toFixed(4)})`;
 
         // Search party base marker
         L.circleMarker([startLat, startLon], {
           radius: 9, color: '#10b981', fillColor: '#10b981', fillOpacity: 0.9, weight: 3
-        }).bindPopup(`<b>Rescue Unit Base</b><br>Helping Hands NGO`).addTo(ngoLayers);
+        }).bindPopup(`<b>${teamName} (Base)</b><br>${baseName}`).addTo(ngoLayers);
 
         // Target sighting location marker
         L.circleMarker([targetLat, targetLon], {
@@ -1063,7 +1315,7 @@ HTML_APP = """<!DOCTYPE html>
             document.getElementById('route-dist').innerText = `${roadDistKm} km`;
             document.getElementById('route-eta').innerText = `${roadEtaMins} mins`;
             document.getElementById('route-engine-badge').innerText = `OpenStreetMap Real Road Network (${streetCoordinates.length} road coordinates)`;
-            document.getElementById('route-path-text').innerText = `Road route navigating through ${streetCoordinates.length} turn segments to target`;
+            document.getElementById('route-path-text').innerText = `Road route navigating through ${streetCoordinates.length} turn segments from ${baseName} to target`;
           }
         } catch (osrmErr) {
           console.warn("OSRM routing offline, fallback to graph coordinates", osrmErr);
@@ -1103,7 +1355,8 @@ HTML_APP = """<!DOCTYPE html>
         setTimeout(() => adminMap && adminMap.invalidateSize(), 200);
       } else {
         dot.className = 'dot role-ngo';
-        disp.innerText = 'Search Party: Helping Hands NGO';
+        const teamName = loggedInTeam ? loggedInTeam.name : 'Helping Hands NGO';
+        disp.innerText = `Search Party: ${teamName}`;
         loadNgoRoute();
         setTimeout(() => ngoMap && ngoMap.invalidateSize(), 200);
       }
@@ -1111,6 +1364,60 @@ HTML_APP = """<!DOCTYPE html>
 
     function openAddCaseModal() { document.getElementById('add-case-modal').style.display = 'flex'; }
     function closeAddCaseModal() { document.getElementById('add-case-modal').style.display = 'none'; }
+
+    function openAddNgoModal() { document.getElementById('add-ngo-modal').style.display = 'flex'; }
+    function closeAddNgoModal() { document.getElementById('add-ngo-modal').style.display = 'none'; }
+
+    function handleNgoBasePresetChange() {
+      const val = document.getElementById('ngo-base-preset').value;
+      if (val === 'custom') return;
+      const parts = val.split('|');
+      document.getElementById('ngo-base-name').value = parts[0];
+      document.getElementById('ngo-lat').value = parts[1];
+      document.getElementById('ngo-lon').value = parts[2];
+    }
+
+    async function handleCreateNgo(e) {
+      e.preventDefault();
+      const newTeam = {
+        name: document.getElementById('ngo-name').value.trim(),
+        org: document.getElementById('ngo-org').value,
+        phone: document.getElementById('ngo-phone').value.trim(),
+        base_location: document.getElementById('ngo-base-name').value.trim(),
+        lat: parseFloat(document.getElementById('ngo-lat').value),
+        lon: parseFloat(document.getElementById('ngo-lon').value),
+        username: document.getElementById('ngo-username').value.trim(),
+        password: document.getElementById('ngo-password').value.trim(),
+      };
+
+      try {
+        const res = await fetch('/api/teams/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newTeam)
+        });
+        const saved = await res.json();
+        closeAddNgoModal();
+        e.target.reset();
+        showToast(`NGO Registered: ${saved.name}`);
+        loadTeams();
+        loadStats();
+      } catch (err) { console.error(err); }
+    }
+
+    async function deleteTeam(id) {
+      if (!confirm(`Are you sure you want to remove Team #${id}?`)) return;
+      try {
+        await fetch('/api/teams/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: id })
+        });
+        showToast(`Team #${id} removed`);
+        loadTeams();
+        loadStats();
+      } catch (err) { console.error(err); }
+    }
 
     async function handleCreateCase(e) {
       e.preventDefault();
@@ -1227,12 +1534,13 @@ HTML_APP = """<!DOCTYPE html>
 
         const matchPerson = allCases.length > 0 ? allCases[0].name : "N.K.SYAM";
         const matchCaseId = allCases.length > 0 ? allCases[0].id : 1;
+        const targetTeamName = loggedInTeam ? loggedInTeam.name : (allTeams.length > 0 ? allTeams[0].name : "Helping Hands NGO");
 
         document.getElementById('match-details').innerHTML = `
           Person: <b>${matchPerson}</b> (Case #${matchCaseId})<br>
           Camera Location: <b>${selectedCamText}</b><br>
           Detection Timestamp: <b>00:04.2s (Frame 105)</b> &bull; Cosine Dist: <b>0.28</b><br>
-          Auto-Dispatch: Nearest team <b>Helping Hands NGO</b> mobilized to <b>${selectedCamKey}</b> via street navigation.
+          Auto-Dispatch: Nearest team <b>${targetTeamName}</b> mobilized to <b>${selectedCamKey}</b> via road navigation.
         `;
 
         await fetch('/api/scan', {
@@ -1263,6 +1571,7 @@ HTML_APP = """<!DOCTYPE html>
     window.addEventListener('DOMContentLoaded', () => {
       initTheme();
       initMaps();
+      loadTeams();
       loadStats();
       loadCases();
       loadMapData();
@@ -1299,14 +1608,23 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             self._send_json(_get_app_stats())
             return
 
+        if path == "/api/teams":
+            self._send_json(APP_STATE["teams"])
+            return
+
         if path == "/api/cases":
             self._send_json(APP_STATE["cases"])
             return
 
         if path == "/api/search-party-route":
+            team_id = int(query.get("team_id", [0])[0]) if "team_id" in query else 0
+            team = next((t for t in APP_STATE["teams"] if t["id"] == team_id), None)
+            if not team:
+                team = APP_STATE["teams"][0] if APP_STATE["teams"] else {"lat": 15.8350, "lon": 78.0450}
+
             active_disp = APP_STATE["dispatches"][0] if APP_STATE["dispatches"] else {}
-            team_lat = active_disp.get("team_lat", 15.8350)
-            team_lon = active_disp.get("team_lon", 78.0450)
+            team_lat = team.get("lat", 15.8350)
+            team_lon = team.get("lon", 78.0450)
             target_lat = active_disp.get("target_lat", 15.8281)
             target_lon = active_disp.get("target_lon", 78.0373)
 
@@ -1332,6 +1650,51 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length).decode("utf-8")) if length > 0 else {}
+
+        if parsed.path == "/api/login":
+            role = body.get("role", "admin")
+            uname = body.get("username", "").strip()
+            pwd = body.get("password", "").strip()
+
+            if role == "admin":
+                if uname == "admin" and pwd == "admin123":
+                    self._send_json({"status": "success", "role": "admin"})
+                    return
+                self._send_json({"status": "error", "error": "Invalid admin credentials"}, status=401)
+                return
+
+            # NGO Team login check
+            for t in APP_STATE["teams"]:
+                if t.get("username") == uname and t.get("password") == pwd:
+                    self._send_json({"status": "success", "role": "ngo", "team": t})
+                    return
+
+            self._send_json({"status": "error", "error": "Invalid NGO username or password"}, status=401)
+            return
+
+        if parsed.path == "/api/teams/add":
+            new_id = max([t["id"] for t in APP_STATE["teams"]], default=0) + 1
+            entry = {
+                "id": new_id,
+                "name": body.get("name", "New Rescue Team"),
+                "org": body.get("org", "NGO"),
+                "phone": body.get("phone", "N/A"),
+                "base_location": body.get("base_location", "Kurnool"),
+                "lat": float(body.get("lat", 15.8350)),
+                "lon": float(body.get("lon", 78.0450)),
+                "username": body.get("username", f"ngo_{new_id}").strip(),
+                "password": body.get("password", "ngo123").strip(),
+                "available": True,
+            }
+            APP_STATE["teams"].append(entry)
+            self._send_json(entry, status=201)
+            return
+
+        if parsed.path == "/api/teams/delete":
+            tid = body.get("id")
+            APP_STATE["teams"] = [t for t in APP_STATE["teams"] if t["id"] != tid]
+            self._send_json({"deleted": tid, "status": "success"})
+            return
 
         if parsed.path == "/api/scan":
             cam = body.get("camera_location", "CAR STAND")
