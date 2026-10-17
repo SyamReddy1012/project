@@ -112,6 +112,18 @@ class CoreTests(unittest.TestCase):
             self.assertIn("lat", t)
             self.assertIn("lon", t)
 
+    def test_case_allotment_notification(self):
+        from mptracker.web import _send_case_allotment_notification, APP_STATE
+        team = APP_STATE["teams"][0]
+        case = APP_STATE["cases"][0]
+        notif = _send_case_allotment_notification(case, team, "Immediate deployment test")
+        self.assertEqual(notif["team_name"], team["name"])
+        self.assertEqual(notif["case_id"], case["id"])
+        self.assertIn("🚨 Case Allotment", notif["title"])
+        self.assertIn("DELIVERED to", notif["sms_status"])
+        self.assertFalse(notif["read"])
+        self.assertIn(notif, APP_STATE["notifications"])
+
 
 if __name__ == "__main__":
     unittest.main()

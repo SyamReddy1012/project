@@ -174,9 +174,58 @@ INITIAL_TEAMS = [
     },
 ]
 
+INITIAL_NOTIFICATIONS = [
+    {
+        "id": 1,
+        "team_id": 1,
+        "team_name": "Helping Hands NGO",
+        "case_id": 1,
+        "person_name": "N.K.SYAM",
+        "last_seen_location": "CAR STAND",
+        "title": "🚨 Case Allotment: N.K.SYAM",
+        "message": "Police Command has allotted Case #1 (N.K.SYAM, age 23, BLUE SHIRT) to Helping Hands NGO. Target Zone: CAR STAND. Road route active.",
+        "timestamp": "Today, 14:10",
+        "read": False,
+        "priority": "HIGH",
+        "phone": "98765-43210",
+        "sms_status": "DELIVERED to +91 98765-43210",
+    },
+    {
+        "id": 2,
+        "team_id": 2,
+        "team_name": "City Police Patrol 1",
+        "case_id": 2,
+        "person_name": "S.Irfan",
+        "last_seen_location": "RGM grounds",
+        "title": "🚨 Case Allotment: S.Irfan",
+        "message": "Police Command has allotted Case #2 (S.Irfan, age 19, black & white shirt) to City Police Patrol 1. Target Zone: RGM grounds.",
+        "timestamp": "Today, 12:45",
+        "read": False,
+        "priority": "HIGH",
+        "phone": "100-000-0001",
+        "sms_status": "DELIVERED to +91 100-000-0001",
+    },
+    {
+        "id": 3,
+        "team_id": 3,
+        "team_name": "Volunteer Unit A",
+        "case_id": 3,
+        "person_name": "Nani kumar",
+        "last_seen_location": "cantene",
+        "title": "🚨 Case Allotment: Nani kumar",
+        "message": "Police Command has allotted Case #3 (Nani kumar, age 17, white shirt black pant) to Volunteer Unit A. Target Zone: cantene.",
+        "timestamp": "Today, 11:30",
+        "read": False,
+        "priority": "MEDIUM",
+        "phone": "91234-56789",
+        "sms_status": "DELIVERED to +91 91234-56789",
+    },
+]
+
 APP_STATE = {
     "cases": list(INITIAL_CASES),
     "teams": list(INITIAL_TEAMS),
+    "notifications": list(INITIAL_NOTIFICATIONS),
     "dispatches": [
         {
             "id": 101,
@@ -197,6 +246,38 @@ APP_STATE = {
 }
 
 
+def _send_case_allotment_notification(case: dict, team: dict, note: str = "") -> dict:
+    """Create and dispatch a real-time notification + simulated SMS to a specific NGO."""
+    new_notif_id = max([n["id"] for n in APP_STATE.get("notifications", [])], default=0) + 1
+    timestamp = datetime.now().strftime("Today, %H:%M")
+    sms_msg = f"EMERGENCY DISPATCH: Case #{case['id']} ({case['name']}) allotted to {team['name']}. Location: {case.get('last_seen_location', 'N/A')}."
+    if note:
+        sms_msg += f" Note: {note}"
+
+    print(f"\n=======================================================")
+    print(f"[SMS GATEWAY DISPATCH] -> To: +91 {team.get('phone', 'N/A')} ({team['name']})")
+    print(f"[MESSAGE] {sms_msg}")
+    print(f"=======================================================\n")
+
+    notif = {
+        "id": new_notif_id,
+        "team_id": team.get("id"),
+        "team_name": team["name"],
+        "case_id": case["id"],
+        "person_name": case["name"],
+        "last_seen_location": case.get("last_seen_location", "Unknown"),
+        "title": f"🚨 Case Allotment: {case['name']}",
+        "message": f"Police Command has allotted Case #{case['id']} ({case['name']}) to {team['name']}. Target Zone: {case.get('last_seen_location', 'N/A')}." + (f" Instructions: {note}" if note else ""),
+        "timestamp": timestamp,
+        "read": False,
+        "priority": "HIGH",
+        "phone": team.get("phone", "N/A"),
+        "sms_status": f"DELIVERED to +91 {team.get('phone', 'N/A')}",
+    }
+    APP_STATE["notifications"].insert(0, notif)
+    return notif
+
+
 def _get_app_stats():
     cases = APP_STATE["cases"]
     total = len(cases)
@@ -208,6 +289,7 @@ def _get_app_stats():
         "closed_cases": closed,
         "en_route_dispatches": sum(1 for d in APP_STATE["dispatches"] if d.get("status") == "EN_ROUTE"),
         "total_teams": len(APP_STATE["teams"]),
+        "total_notifications": len(APP_STATE.get("notifications", [])),
     }
 
 
@@ -519,8 +601,29 @@ HTML_APP = """<!DOCTYPE html>
     .form-group label { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; }
     .form-group input, .form-group select, .form-group textarea { background: var(--input-bg); border: 1px solid var(--card-border); color: var(--text); padding: 0.55rem 0.75rem; border-radius: 6px; font-size: 0.9rem; }
 
-    /* TOAST */
-    #toast-msg { position: fixed; bottom: 20px; right: 20px; background: var(--card); border: 1px solid var(--accent); color: var(--text); padding: 0.75rem 1.25rem; border-radius: 8px; box-shadow: var(--shadow); z-index: 10000; font-size: 0.85rem; display: none; }
+    /* NOTIFICATIONS */
+    .notif-card {
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      position: relative;
+    }
+    .notif-card.unread {
+      border-left: 4px solid var(--danger);
+      background: rgba(239, 68, 68, 0.05);
+    }
+    .notif-badge-pulse {
+      animation: pulseAlert 1.6s infinite ease-in-out;
+    }
+    @keyframes pulseAlert {
+      0% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.15); opacity: 0.85; }
+      100% { transform: scale(1); opacity: 1; }
+    }
   </style>
 </head>
 <body>
@@ -703,6 +806,76 @@ HTML_APP = """<!DOCTYPE html>
       </div>
     </div>
 
+    <!-- Allot Case to NGO Modal -->
+    <div id="allot-case-modal" class="modal-backdrop" style="display: none;">
+      <div class="modal-box">
+        <h2>📢 Allot Case to Search Party / NGO</h2>
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1.2rem;">
+          Dispatch case assignment and trigger real-time notification with road routing to the selected NGO unit.
+        </p>
+        <form onsubmit="handleDispatchAllotment(event)">
+          <input type="hidden" id="allot-case-id" />
+          
+          <div style="background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem;">
+            <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">Case Details:</div>
+            <div style="font-size: 1.05rem; font-weight: 700; color: var(--text); margin-top: 0.2rem;" id="allot-case-title">Case #1: N.K.SYAM</div>
+            <div style="font-size: 0.82rem; color: var(--accent); margin-top: 0.2rem;" id="allot-case-loc">Target: CAR STAND</div>
+          </div>
+
+          <div class="form-group">
+            <label for="allot-team-select">Assign to NGO / Rescue Team *</label>
+            <select id="allot-team-select" required>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="allot-instructions">Command Dispatch Instructions</label>
+            <textarea id="allot-instructions" rows="2" placeholder="e.g. High priority. Immediate ground mobilization required; subject wearing blue shirt."></textarea>
+          </div>
+
+          <div style="background: var(--card); border: 1px solid var(--card-border); border-radius: 6px; padding: 0.6rem 0.8rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem;">
+            <input type="checkbox" id="allot-sms-check" checked disabled />
+            <label for="allot-sms-check" style="margin: 0; color: var(--text); cursor: pointer;">
+              📱 Dispatch instant emergency SMS alert to team's registered phone
+            </label>
+          </div>
+
+          <div style="display: flex; gap: 0.75rem;">
+            <button type="button" class="btn btn-secondary" onclick="closeAllotModal()" style="flex: 1;">Cancel</button>
+            <button type="submit" class="btn btn-danger" style="flex: 2;">🚀 Send Allotment Alert</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Notifications Center Modal -->
+    <div id="notifications-modal" class="modal-backdrop" style="display: none;">
+      <div class="modal-box" style="max-width: 580px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <h2 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+            🔔 Case Allotment Notifications
+          </h2>
+          <span class="badge" style="background: #ef4444;" id="notif-modal-count">0 Unread</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <span style="font-size: 0.8rem; color: var(--text-muted);" id="notif-modal-subtitle">
+            Dispatches sent to your response unit
+          </span>
+          <button class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 2px 8px;" onclick="markAllNotificationsRead()">
+            ✓ Mark All Read
+          </button>
+        </div>
+
+        <div id="notifications-modal-list" style="max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem;">
+          <!-- Loaded dynamically -->
+        </div>
+
+        <div style="margin-top: 1.25rem; text-align: right;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="closeNotificationModal()">Close</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Header Navigation -->
     <header>
       <div class="brand">
@@ -716,6 +889,10 @@ HTML_APP = """<!DOCTYPE html>
         <span class="reg-id">25091A3222</span>
 
         <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">🌓</button>
+
+        <button class="btn btn-secondary btn-sm" id="btn-header-notifs" onclick="openNotificationModal()" title="Case Allotment Notifications" style="position: relative; font-weight: 600; display: flex; align-items: center; gap: 0.35rem;">
+          🔔 <span id="notif-badge" class="badge notif-badge-pulse" style="background: #ef4444; font-size: 0.7rem; padding: 2px 6px; display: none;">0</span>
+        </button>
 
         <div class="user-pill">
           <span class="dot role-admin" id="role-dot"></span>
@@ -920,6 +1097,26 @@ HTML_APP = """<!DOCTYPE html>
       <!-- NGO / SEARCH PARTY VIEW -->
       <div id="view-ngo" style="display: none;">
         
+        <!-- NGO Case Allotment Alerts & Dispatch Orders -->
+        <div class="card" id="ngo-allotment-alert-card" style="margin-bottom: 1.5rem; border-color: rgba(239, 68, 68, 0.4); background: linear-gradient(180deg, rgba(239, 68, 68, 0.06), var(--card));">
+          <div class="card-header" style="border-bottom: 1px solid rgba(239, 68, 68, 0.2);">
+            <div class="card-title" style="display: flex; align-items: center; gap: 0.5rem; color: #ef4444;">
+              <span>🚨</span>
+              <span>Case Allotment Notifications & Dispatch Orders</span>
+              <span class="badge" style="background: #ef4444;" id="ngo-notif-count-badge">0 Allotted</span>
+            </div>
+            <button class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 2px 8px;" onclick="markAllNotificationsRead()">
+              ✓ Acknowledge All
+            </button>
+          </div>
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.85rem;">
+            Emergency cases officially allotted to your unit by Police Command with SMS alerts. Click <b>"Accept & Navigate"</b> to automatically calculate and trace the street road route:
+          </div>
+          <div id="ngo-notifs-feed" style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
         <!-- Shortest Road Navigation Route Callout -->
         <div class="route-callout">
           <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem;">
@@ -1143,6 +1340,7 @@ HTML_APP = """<!DOCTYPE html>
       document.getElementById('screen-app').style.display = 'none';
       document.getElementById('screen-login').style.display = 'flex';
       loggedInTeam = null;
+      loadNotifications();
       showToast('Logged out successfully');
     }
 
@@ -1256,6 +1454,7 @@ HTML_APP = """<!DOCTYPE html>
         const statusClass = c.status === 'ACTIVE' ? 'tag-active' : (c.status === 'RESCUED' ? 'tag-rescued' : 'tag-closed');
         
         let actionButtons = '';
+        actionButtons += `<button class="btn btn-secondary btn-sm" onclick="openAllotModal(${c.id})" title="Allot case to specific NGO and send SMS alert">📢 Allot NGO</button> `;
         if (c.status === 'ACTIVE') {
           actionButtons += `<button class="btn btn-success btn-sm" onclick="markCaseResolved(${c.id})">Resolve</button> `;
         }
@@ -1268,7 +1467,10 @@ HTML_APP = """<!DOCTYPE html>
           <td style="color: var(--text-muted);">${c.clothes || 'Standard'}</td>
           <td><b>${c.last_seen_location}</b></td>
           <td><span class="tag ${statusClass}">${c.status}</span></td>
-          <td>${c.assigned_team}</td>
+          <td>
+            <span style="font-weight: 600; color: var(--accent);">${c.assigned_team}</span>
+            <button class="btn btn-secondary btn-sm" style="font-size: 0.7rem; padding: 1px 6px; margin-left: 6px; border-radius: 4px;" onclick="openAllotModal(${c.id})" title="Reassign to another NGO">Change</button>
+          </td>
           <td style="text-align: right; white-space: nowrap;">${actionButtons}</td>
         `;
         tbody.appendChild(tr);
@@ -1430,14 +1632,229 @@ HTML_APP = """<!DOCTYPE html>
       if (role === 'admin') {
         dot.className = 'dot role-admin';
         disp.innerText = 'Admin: Police Command';
+        loadNotifications();
         setTimeout(() => adminMap && adminMap.invalidateSize(), 200);
       } else {
         dot.className = 'dot role-ngo';
         const teamName = loggedInTeam ? loggedInTeam.name : 'Helping Hands NGO';
         disp.innerText = `Search Party: ${teamName}`;
         loadNgoRoute();
+        loadNotifications();
         setTimeout(() => ngoMap && ngoMap.invalidateSize(), 200);
       }
+    }
+
+    let allNotifications = [];
+
+    async function loadNotifications() {
+      try {
+        const teamParam = loggedInTeam ? `?team_id=${loggedInTeam.id}` : '';
+        const res = await fetch(`/api/notifications${teamParam}`);
+        const data = await res.json();
+        allNotifications = data.notifications || [];
+
+        // Update Header Badge
+        const badge = document.getElementById('notif-badge');
+        if (badge) {
+          if (data.unread_count > 0) {
+            badge.style.display = 'inline-block';
+            badge.innerText = data.unread_count;
+          } else {
+            badge.style.display = 'none';
+          }
+        }
+
+        // Update Modal Count
+        const modalCount = document.getElementById('notif-modal-count');
+        if (modalCount) modalCount.innerText = `${data.unread_count} Unread`;
+
+        // Update NGO view badge
+        const ngoBadge = document.getElementById('ngo-notif-count-badge');
+        if (ngoBadge) ngoBadge.innerText = `${allNotifications.length} Allotted (${data.unread_count} New)`;
+
+        renderNotificationsList();
+        renderNgoNotifications();
+      } catch (err) {
+        console.error("Error loading notifications:", err);
+      }
+    }
+
+    function renderNotificationsList() {
+      const list = document.getElementById('notifications-modal-list');
+      if (!list) return;
+      list.innerHTML = '';
+
+      if (allNotifications.length === 0) {
+        list.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No case allotment notifications found.</div>`;
+        return;
+      }
+
+      allNotifications.forEach(n => {
+        const div = document.createElement('div');
+        div.className = `notif-card ${!n.read ? 'unread' : ''}`;
+        div.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
+            <div style="font-weight: 700; color: var(--text); font-size: 0.92rem;">
+              ${!n.read ? '<span style="color: #ef4444; margin-right: 4px;">●</span>' : ''}${n.title}
+            </div>
+            <span style="font-size: 0.75rem; color: var(--text-muted); white-space: nowrap;">${n.timestamp}</span>
+          </div>
+          <div style="font-size: 0.83rem; color: var(--text-muted); line-height: 1.35;">
+            ${n.message}
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.35rem; flex-wrap: wrap; gap: 0.4rem;">
+            <span style="font-size: 0.75rem; color: #10b981;">📱 ${n.sms_status}</span>
+            <div style="display: flex; gap: 0.4rem;">
+              ${n.case_id ? `<button class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 2px 7px;" onclick="acceptCaseAndNavigate(${n.case_id})">🚗 Trace Route</button>` : ''}
+              ${!n.read ? `<button class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 2px 7px;" onclick="markNotificationRead(${n.id})">✓ Acknowledge</button>` : ''}
+            </div>
+          </div>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    function renderNgoNotifications() {
+      const feed = document.getElementById('ngo-notifs-feed');
+      if (!feed) return;
+      feed.innerHTML = '';
+
+      if (allNotifications.length === 0) {
+        feed.innerHTML = `
+          <div style="background: var(--input-bg); border: 1px dashed var(--card-border); border-radius: 8px; padding: 1rem; text-align: center; color: var(--text-muted); font-size: 0.85rem;">
+            ✅ No pending case allotments for this unit. All dispatches acknowledged.
+          </div>
+        `;
+        return;
+      }
+
+      allNotifications.forEach(n => {
+        const div = document.createElement('div');
+        div.className = `notif-card ${!n.read ? 'unread' : ''}`;
+        div.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; flex-wrap: wrap;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 0.4rem;">
+                <span class="badge" style="background: #ef4444;">CASE ALLOTMENT ORDER</span>
+                ${!n.read ? '<span class="badge" style="background: #f59e0b;">NEW UNREAD</span>' : '<span class="badge" style="background: #10b981;">ACKNOWLEDGED</span>'}
+              </div>
+              <h3 style="font-size: 1.05rem; margin-top: 0.3rem; color: var(--text);">${n.title}</h3>
+            </div>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">${n.timestamp}</span>
+          </div>
+
+          <div style="background: var(--card); border: 1px solid var(--card-border); border-radius: 6px; padding: 0.6rem 0.8rem; margin: 0.3rem 0; font-size: 0.84rem;">
+            <div>Missing Person: <b>${n.person_name}</b> (Case #${n.case_id})</div>
+            <div>Target Sighting Zone: <b style="color: var(--accent);">${n.last_seen_location}</b></div>
+            <div style="color: var(--text-muted); margin-top: 0.2rem; font-size: 0.8rem;">${n.message}</div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="font-size: 0.78rem; color: #10b981; display: flex; align-items: center; gap: 0.3rem;">
+              <span>📱</span> <span>SMS Dispatch Alert: <b>${n.sms_status}</b></span>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <button class="btn btn-success btn-sm" onclick="acceptCaseAndNavigate(${n.case_id})">
+                🚗 Accept & Trace Road Route
+              </button>
+              ${!n.read ? `<button class="btn btn-secondary btn-sm" onclick="markNotificationRead(${n.id})">✓ Acknowledge</button>` : ''}
+            </div>
+          </div>
+        `;
+        feed.appendChild(div);
+      });
+    }
+
+    function acceptCaseAndNavigate(caseId) {
+      if (currentRole !== 'ngo') {
+        switchView('ngo');
+      }
+      const sel = document.getElementById('resolve-case-id');
+      if (sel) {
+        sel.value = caseId;
+        updateNgoSelection();
+      }
+      closeNotificationModal();
+      showToast(`Navigating road route to Case #${caseId}`);
+      const mapEl = document.getElementById('ngo-map');
+      if (mapEl) mapEl.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    async function markNotificationRead(id) {
+      try {
+        await fetch('/api/notifications/mark-read', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: id })
+        });
+        loadNotifications();
+      } catch (err) { console.error(err); }
+    }
+
+    async function markAllNotificationsRead() {
+      try {
+        await fetch('/api/notifications/mark-read', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ team_id: loggedInTeam ? loggedInTeam.id : null })
+        });
+        showToast('All notifications marked as read');
+        loadNotifications();
+      } catch (err) { console.error(err); }
+    }
+
+    function openNotificationModal() {
+      document.getElementById('notifications-modal').style.display = 'flex';
+      loadNotifications();
+    }
+    function closeNotificationModal() {
+      document.getElementById('notifications-modal').style.display = 'none';
+    }
+
+    function openAllotModal(caseId) {
+      const c = allCases.find(item => item.id === caseId);
+      if (!c) return;
+      document.getElementById('allot-case-id').value = c.id;
+      document.getElementById('allot-case-title').innerText = `Case #${c.id}: ${c.name} (${c.age} / ${c.gender})`;
+      document.getElementById('allot-case-loc').innerText = `Target Location: ${c.last_seen_location} • Current Unit: ${c.assigned_team}`;
+      document.getElementById('allot-instructions').value = '';
+
+      const sel = document.getElementById('allot-team-select');
+      sel.innerHTML = '';
+      allTeams.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.innerText = `${t.name} (${t.base_location}) - Phone: ${t.phone}`;
+        if (t.name === c.assigned_team) opt.selected = true;
+        sel.appendChild(opt);
+      });
+
+      document.getElementById('allot-case-modal').style.display = 'flex';
+    }
+
+    function closeAllotModal() {
+      document.getElementById('allot-case-modal').style.display = 'none';
+    }
+
+    async function handleDispatchAllotment(e) {
+      e.preventDefault();
+      const caseId = parseInt(document.getElementById('allot-case-id').value);
+      const teamId = parseInt(document.getElementById('allot-team-select').value);
+      const note = document.getElementById('allot-instructions').value.trim();
+
+      try {
+        const res = await fetch('/api/cases/allot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ case_id: caseId, team_id: teamId, note: note })
+        });
+        const data = await res.json();
+        closeAllotModal();
+        showToast(data.message || `Case #${caseId} allotted successfully!`);
+        loadCases();
+        loadStats();
+        loadNotifications();
+      } catch (err) { console.error(err); }
     }
 
     function openAddCaseModal() { document.getElementById('add-case-modal').style.display = 'flex'; }
@@ -1653,6 +2070,8 @@ HTML_APP = """<!DOCTYPE html>
       loadStats();
       loadCases();
       loadMapData();
+      loadNotifications();
+      setInterval(loadNotifications, 8000);
     });
   </script>
 </body>
@@ -1724,6 +2143,24 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             top_k = int(query.get("top", [5])[0]) if "top" in query else 5
             data = _get_demo_data(top_k=top_k)
             self._send_json(data)
+            return
+
+        if path == "/api/notifications":
+            team_id = int(query.get("team_id", [0])[0]) if "team_id" in query else 0
+            team_name = query.get("team_name", [""])[0].strip()
+
+            notifs = APP_STATE.get("notifications", [])
+            if team_id:
+                notifs = [n for n in notifs if n.get("team_id") == team_id]
+            elif team_name:
+                notifs = [n for n in notifs if n.get("team_name") == team_name]
+
+            unread_count = sum(1 for n in notifs if not n.get("read"))
+            self._send_json({
+                "notifications": notifs,
+                "unread_count": unread_count,
+                "total": len(notifs),
+            })
             return
 
         # Default HTML application
@@ -1817,6 +2254,7 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             new_id = max([c["id"] for c in APP_STATE["cases"]], default=0) + 1
             loc_name = body.get("last_seen_location", "CAR STAND")
             coords = CAMERA_LOCATIONS.get(loc_name, {"lat": 15.8281, "lon": 78.0373})
+            assigned_team_name = body.get("assigned_team", "Helping Hands NGO")
 
             entry = {
                 "id": new_id,
@@ -1827,12 +2265,64 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
                 "last_seen_location": loc_name,
                 "status": "ACTIVE",
                 "created_at": datetime.now().strftime("%d %b, %H:%M"),
-                "assigned_team": body.get("assigned_team", "Helping Hands NGO"),
+                "assigned_team": assigned_team_name,
                 "lat": coords["lat"],
                 "lon": coords["lon"],
             }
             APP_STATE["cases"].insert(0, entry)
+
+            # Auto-dispatch notification + simulated SMS to the allotted NGO
+            target_team = next((t for t in APP_STATE["teams"] if t["name"] == assigned_team_name), None)
+            if target_team:
+                _send_case_allotment_notification(entry, target_team, "New case enrolled and allotted by Police Command.")
+
             self._send_json(entry, status=201)
+            return
+
+        if parsed.path == "/api/cases/allot":
+            cid = int(body.get("case_id", 0))
+            team_id = int(body.get("team_id", 0))
+            team_name = body.get("team_name", "")
+            note = body.get("note", "").strip()
+
+            target_case = next((c for c in APP_STATE["cases"] if c["id"] == cid), None)
+            if not target_case:
+                self._send_json({"status": "error", "error": "Case not found"}, status=404)
+                return
+
+            target_team = None
+            if team_id:
+                target_team = next((t for t in APP_STATE["teams"] if t["id"] == team_id), None)
+            elif team_name:
+                target_team = next((t for t in APP_STATE["teams"] if t["name"] == team_name), None)
+
+            if not target_team:
+                self._send_json({"status": "error", "error": "NGO Team not found"}, status=404)
+                return
+
+            target_case["assigned_team"] = target_team["name"]
+            notif = _send_case_allotment_notification(target_case, target_team, note)
+
+            self._send_json({
+                "status": "success",
+                "message": f"Case #{cid} ({target_case['name']}) successfully allotted to {target_team['name']}.",
+                "notification": notif,
+                "case": target_case,
+                "sms_alert": notif["sms_status"],
+            })
+            return
+
+        if parsed.path == "/api/notifications/mark-read":
+            nid = body.get("id")
+            team_id = body.get("team_id")
+            for n in APP_STATE.get("notifications", []):
+                if nid and n.get("id") == nid:
+                    n["read"] = True
+                elif team_id and n.get("team_id") == team_id:
+                    n["read"] = True
+                elif not nid and not team_id:
+                    n["read"] = True
+            self._send_json({"status": "success"})
             return
 
         if parsed.path == "/api/cases/delete":
