@@ -124,6 +124,46 @@ class CoreTests(unittest.TestCase):
         self.assertFalse(notif["read"])
         self.assertIn(notif, APP_STATE["notifications"])
 
+    def test_ngo_access_control(self):
+        import json
+        import threading
+        import time
+        import urllib.error
+        import urllib.request
+        from http.server import ThreadingHTTPServer
+        from mptracker.web import MPTrackerHandler
+
+        server = ThreadingHTTPServer(("127.0.0.1", 19888), MPTrackerHandler)
+        t = threading.Thread(target=server.serve_forever, daemon=True)
+        t.start()
+        time.sleep(0.3)
+
+        try:
+            # NGO trying to add case -> expect 403 Forbidden
+            payload = json.dumps({"name": "Unauthorized Case"}).encode("utf-8")
+            req = urllib.request.Request(
+                "http://127.0.0.1:19888/api/cases/add",
+                data=payload,
+                headers={"Content-Type": "application/json", "X-User-Role": "ngo"},
+            )
+            with self.assertRaises(urllib.error.HTTPError) as cm:
+                urllib.request.urlopen(req)
+            self.assertEqual(cm.exception.code, 403)
+
+            # NGO trying to add team -> expect 403 Forbidden
+            req_team = urllib.request.Request(
+                "http://127.0.0.1:19888/api/teams/add",
+                data=payload,
+                headers={"Content-Type": "application/json", "X-User-Role": "ngo"},
+            )
+            with self.assertRaises(urllib.error.HTTPError) as cm_team:
+                urllib.request.urlopen(req_team)
+            self.assertEqual(cm_team.exception.code, 403)
+        finally:
+            server.shutdown()
+            server.server_close()
+
 
 if __name__ == "__main__":
     unittest.main()
+

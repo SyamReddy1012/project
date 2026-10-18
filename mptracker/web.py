@@ -992,10 +992,14 @@ HTML_APP = """<!DOCTYPE html>
       </div>
 
       <!-- Portal Tabs -->
-      <div class="tab-bar">
-        <button class="tab-btn active" id="tab-admin" onclick="switchView('admin')">Admin Command Center</button>
-        <button class="tab-btn" id="tab-ngo" onclick="switchView('ngo')">NGO / Search Party Portal</button>
+      <div class="tab-bar" id="portal-tab-bar">
+        <button class="tab-btn active" id="tab-admin" onclick="switchView('admin')">👮 Admin Command Center</button>
+        <button class="tab-btn" id="tab-ngo" onclick="switchView('ngo')">🚑 NGO / Search Party Portal</button>
+        <div id="ngo-portal-badge" style="display: none; align-items: center; gap: 0.5rem; font-weight: 700; color: #10b981; padding: 0.65rem 0.5rem; font-size: 0.95rem;">
+          🚑 Dedicated Search Party & Field Rescue Dashboard
+        </div>
       </div>
+
 
       <!-- ADMIN VIEW -->
       <div id="view-admin">
@@ -1282,11 +1286,61 @@ HTML_APP = """<!DOCTYPE html>
     let currentFilter = 'ALL';
     let searchQuery = '';
     let currentRole = 'admin';
+    let loggedInRole = null;
     let loggedInTeam = null;
     let adminMap = null;
     let ngoMap = null;
     let adminLayers = null;
     let ngoLayers = null;
+
+    // ROLE & PERMISSION MANAGEMENT
+    function applyRolePermissions(role) {
+      loggedInRole = role;
+      const tabAdmin = document.getElementById('tab-admin');
+      const tabNgo = document.getElementById('tab-ngo');
+      const ngoBadge = document.getElementById('ngo-portal-badge');
+      const viewAdmin = document.getElementById('view-admin');
+      const viewNgo = document.getElementById('view-ngo');
+      const dot = document.getElementById('role-dot');
+      const disp = document.getElementById('current-user-display');
+
+      if (role === 'ngo') {
+        // Strictly prevent NGO from seeing or clicking Admin tab
+        if (tabAdmin) tabAdmin.style.display = 'none';
+        if (tabNgo) tabNgo.style.display = 'none';
+        if (ngoBadge) ngoBadge.style.display = 'flex';
+        if (viewAdmin) viewAdmin.style.display = 'none';
+        if (viewNgo) viewNgo.style.display = 'block';
+
+        if (dot) dot.className = 'dot role-ngo';
+        const teamName = loggedInTeam ? loggedInTeam.name : 'Search Party Unit';
+        if (disp) disp.innerText = `Search Party: ${teamName}`;
+
+        currentRole = 'ngo';
+        loadNgoRoute();
+        setTimeout(() => ngoMap && ngoMap.invalidateSize(), 200);
+      } else {
+        // Police Command Admin View
+        if (tabAdmin) {
+          tabAdmin.style.display = 'inline-block';
+          tabAdmin.classList.add('active');
+        }
+        if (tabNgo) {
+          tabNgo.style.display = 'inline-block';
+          tabNgo.classList.remove('active');
+        }
+        if (ngoBadge) ngoBadge.style.display = 'none';
+        if (viewAdmin) viewAdmin.style.display = 'block';
+        if (viewNgo) viewNgo.style.display = 'none';
+
+        if (dot) dot.className = 'dot role-admin';
+        if (disp) disp.innerText = 'Admin: Police Command';
+
+        currentRole = 'admin';
+        loadNotifications();
+        setTimeout(() => adminMap && adminMap.invalidateSize(), 200);
+      }
+    }
 
     // THEME HANDLING (DARK / LIGHT)
     function initTheme() {
@@ -1376,27 +1430,59 @@ HTML_APP = """<!DOCTYPE html>
           return;
         }
 
+        loggedInRole = data.role;
         loggedInTeam = data.team || null;
+
+        // Persist session to survive page reloads
+        sessionStorage.setItem('mptracker_role', loggedInRole);
+        sessionStorage.setItem('mptracker_team', JSON.stringify(loggedInTeam));
 
         // Transition from Login Screen to Dashboard
         document.getElementById('screen-login').style.display = 'none';
         document.getElementById('screen-app').style.display = 'flex';
         
-        switchView(role);
+        applyRolePermissions(loggedInRole);
         const nameDisplay = loggedInTeam ? loggedInTeam.name : 'Police Command';
-        showToast(`Welcome back, ${nameDisplay}`);
+        showToast(`Authenticated as ${nameDisplay}`);
       } catch (err) {
         console.error(err);
       }
     }
 
     function handleLogout() {
+      sessionStorage.removeItem('mptracker_role');
+      sessionStorage.removeItem('mptracker_team');
+      loggedInRole = null;
+      loggedInTeam = null;
+      currentRole = 'admin';
       document.getElementById('screen-app').style.display = 'none';
       document.getElementById('screen-login').style.display = 'flex';
-      loggedInTeam = null;
+
+      const tabAdmin = document.getElementById('tab-admin');
+      const tabNgo = document.getElementById('tab-ngo');
+      const ngoBadge = document.getElementById('ngo-portal-badge');
+      if (tabAdmin) tabAdmin.style.display = 'inline-block';
+      if (tabNgo) tabNgo.style.display = 'inline-block';
+      if (ngoBadge) ngoBadge.style.display = 'none';
+
       loadNotifications();
       showToast('Logged out successfully');
     }
+
+    function restoreSession() {
+      const savedRole = sessionStorage.getItem('mptracker_role');
+      const savedTeam = sessionStorage.getItem('mptracker_team');
+      if (savedRole) {
+        loggedInRole = savedRole;
+        if (savedTeam) {
+          try { loggedInTeam = JSON.parse(savedTeam); } catch(e){}
+        }
+        document.getElementById('screen-login').style.display = 'none';
+        document.getElementById('screen-app').style.display = 'flex';
+        applyRolePermissions(loggedInRole);
+      }
+    }
+
 
     // MAP INITIALIZATION
     function initMaps() {
@@ -1508,11 +1594,25 @@ HTML_APP = """<!DOCTYPE html>
         const statusClass = c.status === 'ACTIVE' ? 'tag-active' : (c.status === 'RESCUED' ? 'tag-rescued' : 'tag-closed');
         
         let actionButtons = '';
-        actionButtons += `<button class="btn btn-secondary btn-sm" onclick="openAllotModal(${c.id})" title="Allot case to specific NGO and send SMS alert">📢 Allot NGO</button> `;
-        if (c.status === 'ACTIVE') {
-          actionButtons += `<button class="btn btn-success btn-sm" onclick="markCaseResolved(${c.id})">Resolve</button> `;
+        if (loggedInRole === 'admin') {
+          actionButtons += `<button class="btn btn-secondary btn-sm" onclick="openAllotModal(${c.id})" title="Allot case to specific NGO and send SMS alert">📢 Allot NGO</button> `;
+          if (c.status === 'ACTIVE') {
+            actionButtons += `<button class="btn btn-success btn-sm" onclick="markCaseResolved(${c.id})">Resolve</button> `;
+          }
+          actionButtons += `<button class="btn btn-danger btn-sm" onclick="deleteCase(${c.id})" title="Remove Case">Remove</button>`;
+        } else {
+          const isMyCase = loggedInTeam && c.assigned_team === loggedInTeam.name;
+          if (isMyCase) {
+            actionButtons += `<button class="btn btn-success btn-sm" onclick="acceptCaseAndNavigate(${c.id})">🚗 Trace Route</button>`;
+          } else {
+            actionButtons += `<span style="font-size: 0.75rem; color: var(--text-muted);">${c.assigned_team || 'Assigned'}</span>`;
+          }
         }
-        actionButtons += `<button class="btn btn-danger btn-sm" onclick="deleteCase(${c.id})" title="Remove Case">Remove</button>`;
+
+        const assignColumn = loggedInRole === 'admin'
+          ? `<span style="font-weight: 600; color: var(--accent);">${c.assigned_team}</span>
+             <button class="btn btn-secondary btn-sm" style="font-size: 0.7rem; padding: 1px 6px; margin-left: 6px; border-radius: 4px;" onclick="openAllotModal(${c.id})" title="Reassign to another NGO">Change</button>`
+          : `<span style="font-weight: 600; color: var(--accent);">${c.assigned_team}</span>`;
 
         tr.innerHTML = `
           <td>#${c.id}</td>
@@ -1521,10 +1621,7 @@ HTML_APP = """<!DOCTYPE html>
           <td style="color: var(--text-muted);">${c.clothes || 'Standard'}</td>
           <td><b>${c.last_seen_location}</b></td>
           <td><span class="tag ${statusClass}">${c.status}</span></td>
-          <td>
-            <span style="font-weight: 600; color: var(--accent);">${c.assigned_team}</span>
-            <button class="btn btn-secondary btn-sm" style="font-size: 0.7rem; padding: 1px 6px; margin-left: 6px; border-radius: 4px;" onclick="openAllotModal(${c.id})" title="Reassign to another NGO">Change</button>
-          </td>
+          <td>${assignColumn}</td>
           <td style="text-align: right; white-space: nowrap;">${actionButtons}</td>
         `;
         tbody.appendChild(tr);
@@ -1675,6 +1772,11 @@ HTML_APP = """<!DOCTYPE html>
     }
 
     function switchView(role) {
+      if (loggedInRole === 'ngo' && role === 'admin') {
+        showToast('⚠️ Access Denied: Admin Command Center is restricted to Police Command.');
+        console.warn('Unauthorized attempt by NGO login to access Admin view.');
+        return;
+      }
       currentRole = role;
       document.getElementById('tab-admin').classList.toggle('active', role === 'admin');
       document.getElementById('tab-ngo').classList.toggle('active', role === 'ngo');
@@ -1874,6 +1976,10 @@ HTML_APP = """<!DOCTYPE html>
     }
 
     function openAllotModal(caseId) {
+      if (loggedInRole !== 'admin') {
+        showToast('⚠️ Access Denied: Only Police Command can allot cases to NGOs.');
+        return;
+      }
       const c = allCases.find(item => item.id === caseId);
       if (!c) return;
       document.getElementById('allot-case-id').value = c.id;
@@ -1901,6 +2007,10 @@ HTML_APP = """<!DOCTYPE html>
 
     async function handleDispatchAllotment(e) {
       e.preventDefault();
+      if (loggedInRole !== 'admin') {
+        showToast('⚠️ Access Denied: Administrator role required.');
+        return;
+      }
       const caseId = parseInt(document.getElementById('allot-case-id').value);
       const teamId = parseInt(document.getElementById('allot-team-select').value);
       const note = document.getElementById('allot-instructions').value.trim();
@@ -1909,7 +2019,7 @@ HTML_APP = """<!DOCTYPE html>
       try {
         const res = await fetch('/api/cases/allot', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' },
           body: JSON.stringify({ case_id: caseId, team_id: teamId, note: note, phone: phone })
         });
         const data = await res.json();
@@ -1921,11 +2031,24 @@ HTML_APP = """<!DOCTYPE html>
       } catch (err) { console.error(err); }
     }
 
-    function openAddCaseModal() { document.getElementById('add-case-modal').style.display = 'flex'; }
+    function openAddCaseModal() {
+      if (loggedInRole !== 'admin') {
+        showToast('⚠️ Access Denied: Only Police Command can enroll new cases.');
+        return;
+      }
+      document.getElementById('add-case-modal').style.display = 'flex';
+    }
     function closeAddCaseModal() { document.getElementById('add-case-modal').style.display = 'none'; }
 
-    function openAddNgoModal() { document.getElementById('add-ngo-modal').style.display = 'flex'; }
+    function openAddNgoModal() {
+      if (loggedInRole !== 'admin') {
+        showToast('⚠️ Access Denied: Only Police Command can register new NGOs.');
+        return;
+      }
+      document.getElementById('add-ngo-modal').style.display = 'flex';
+    }
     function closeAddNgoModal() { document.getElementById('add-ngo-modal').style.display = 'none'; }
+
 
     function handleNgoBasePresetChange() {
       const val = document.getElementById('ngo-base-preset').value;
@@ -1938,6 +2061,10 @@ HTML_APP = """<!DOCTYPE html>
 
     async function handleCreateNgo(e) {
       e.preventDefault();
+      if (loggedInRole !== 'admin') {
+        showToast('⚠️ Access Denied: Only Police Command can register new NGOs.');
+        return;
+      }
       const newTeam = {
         name: document.getElementById('ngo-name').value.trim(),
         org: document.getElementById('ngo-org').value,
@@ -1952,7 +2079,7 @@ HTML_APP = """<!DOCTYPE html>
       try {
         const res = await fetch('/api/teams/add', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' },
           body: JSON.stringify(newTeam)
         });
         const saved = await res.json();
@@ -1965,11 +2092,15 @@ HTML_APP = """<!DOCTYPE html>
     }
 
     async function deleteTeam(id) {
+      if (loggedInRole !== 'admin') {
+        showToast('⚠️ Access Denied: Only Police Command can remove rescue teams.');
+        return;
+      }
       if (!confirm(`Are you sure you want to remove Team #${id}?`)) return;
       try {
         await fetch('/api/teams/delete', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' },
           body: JSON.stringify({ id: id })
         });
         showToast(`Team #${id} removed`);
@@ -1980,6 +2111,10 @@ HTML_APP = """<!DOCTYPE html>
 
     async function handleCreateCase(e) {
       e.preventDefault();
+      if (loggedInRole !== 'admin') {
+        showToast('⚠️ Access Denied: Only Police Command can enroll new cases.');
+        return;
+      }
       const newCase = {
         name: document.getElementById('new-name').value,
         age: parseInt(document.getElementById('new-age').value),
@@ -1992,7 +2127,7 @@ HTML_APP = """<!DOCTYPE html>
       try {
         const res = await fetch('/api/cases/add', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' },
           body: JSON.stringify(newCase)
         });
         closeAddCaseModal();
@@ -2004,11 +2139,15 @@ HTML_APP = """<!DOCTYPE html>
     }
 
     async function deleteCase(id) {
+      if (loggedInRole !== 'admin') {
+        showToast('⚠️ Access Denied: Only Police Command can remove cases.');
+        return;
+      }
       if (!confirm(`Are you sure you want to remove Case #${id}?`)) return;
       try {
         await fetch('/api/cases/delete', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' },
           body: JSON.stringify({ id: id })
         });
         showToast(`Case #${id} removed`);
@@ -2073,6 +2212,10 @@ HTML_APP = """<!DOCTYPE html>
     }
 
     function startVideoScan() {
+      if (loggedInRole !== 'admin') {
+        showToast('⚠️ Access Denied: Video facial recognition scanning is restricted to Police Command.');
+        return;
+      }
       const video = document.getElementById('video-player');
       const radar = document.getElementById('radar-sweep');
       const status = document.getElementById('scan-status');
@@ -2104,7 +2247,7 @@ HTML_APP = """<!DOCTYPE html>
 
         await fetch('/api/scan', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'},
+          headers: {'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin'},
           body: JSON.stringify({ camera_location: selectedCamKey, case_id: matchCaseId, person_name: matchPerson })
         });
 
@@ -2135,6 +2278,7 @@ HTML_APP = """<!DOCTYPE html>
       loadCases();
       loadMapData();
       loadNotifications();
+      restoreSession();
       setInterval(loadNotifications, 8000);
     });
   </script>
@@ -2274,7 +2418,21 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             self._send_json({"status": "error", "error": "Invalid NGO username or password"}, status=401)
             return
 
+        # Server-side role authorization check: reject NGO calls to command-level admin endpoints
+        role_header = self.headers.get("X-User-Role", "").strip().lower()
+        if role_header == "ngo" and parsed.path in (
+            "/api/teams/add",
+            "/api/teams/delete",
+            "/api/cases/add",
+            "/api/cases/delete",
+            "/api/cases/allot",
+            "/api/scan",
+        ):
+            self._send_json({"status": "error", "error": "Access Denied: Police Command admin privileges required."}, status=403)
+            return
+
         if parsed.path == "/api/teams/add":
+
             new_id = max([t["id"] for t in APP_STATE["teams"]], default=0) + 1
             entry = {
                 "id": new_id,
