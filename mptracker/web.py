@@ -468,11 +468,13 @@ HTML_APP = """<!DOCTYPE html>
   
   <!-- Leaflet GIS Map CSS & JS with Fast Multi-CDN Support -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script>
     if (typeof L === 'undefined') {
-      document.write('<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />');
-      document.write('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>');
+      const s = document.createElement('script');
+      s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      document.head.appendChild(s);
     }
   </script>
 
@@ -2068,6 +2070,117 @@ HTML_APP = """<!DOCTYPE html>
       </div>
     </div>
 
+    <!-- Case Dossier & Sighting Stepper Modal -->
+    <div id="case-dossier-modal" class="modal-backdrop" style="display: none;">
+      <div class="modal-box" style="max-width: 680px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span class="badge" style="background: var(--accent); color: #000; font-weight: 800;" id="dossier-id-badge">CASE #1</span>
+            <h2 style="margin: 0; font-size: 1.25rem;" id="dossier-name">Missing Person Dossier</h2>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="closeCaseDossier()" style="padding: 2px 8px;">✕</button>
+        </div>
+
+        <div class="dossier-grid">
+          <div class="dossier-avatar">
+            👤
+          </div>
+          <div>
+            <div style="display: flex; gap: 0.45rem; align-items: center; margin-bottom: 0.45rem;">
+              <span class="tag tag-active" id="dossier-status-tag">ACTIVE</span>
+              <span style="font-size: 0.82rem; color: var(--text-muted);" id="dossier-age-gender">21 Years / Male</span>
+            </div>
+            <div style="font-size: 0.84rem; margin-bottom: 0.35rem;">
+              <span style="color: var(--text-muted);">Attire:</span> <b id="dossier-clothes">Standard Attire</b>
+            </div>
+            <div style="font-size: 0.84rem; margin-bottom: 0.35rem;">
+              <span style="color: var(--text-muted);">Last Seen Location:</span> <b id="dossier-loc" style="color: var(--warning);">CAR STAND</b>
+            </div>
+            <div style="font-size: 0.84rem; margin-bottom: 0.35rem;">
+              <span style="color: var(--text-muted);">Assigned Search Unit:</span> <b id="dossier-team" style="color: var(--purple);">Helping Hands NGO</b>
+            </div>
+            <div style="font-size: 0.78rem; font-family: monospace; color: var(--text-muted);">
+              Coordinates: <span id="dossier-coords">15.8281, 78.0373</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="font-size: 0.82rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.35rem;">
+          Live Investigation Timeline & Dispatch Status
+        </div>
+        <div class="timeline-stepper" id="dossier-timeline">
+          <!-- Populated dynamically -->
+        </div>
+
+        <div style="display: flex; gap: 0.65rem; margin-top: 1.25rem; flex-wrap: wrap;">
+          <button class="btn btn-secondary btn-sm" onclick="locateCaseOnMapFromDossier()">
+            📍 Center on Graph
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="openPosterModal(currentDossierCaseId)">
+            🖨️ Generate Flyer
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="openAllotModal(currentDossierCaseId)">
+            📢 Re-Allot NGO
+          </button>
+          <button class="btn btn-success btn-sm" id="btn-dossier-resolve" onclick="markCaseResolved(currentDossierCaseId)">
+            ✓ Mark Case Resolved
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="closeCaseDossier()" style="margin-left: auto;">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Emergency Missing Person Poster / Flyer Modal -->
+    <div id="poster-modal" class="modal-backdrop" style="display: none;">
+      <div class="modal-box" style="max-width: 520px; background: transparent; box-shadow: none; border: none; padding: 0;">
+        <div class="poster-container">
+          <div class="poster-banner">
+            ⚠️ MISSING PERSON ALERT ⚠️
+          </div>
+          <div class="poster-photo-box">
+            👤
+            <div style="font-size: 0.8rem; color: #64748b; font-weight: 600; margin-top: 0.35rem;">POLICE IDENTIFICATION PHOTO</div>
+          </div>
+          <div style="text-align: center; margin-bottom: 1rem;">
+            <h1 style="font-size: 1.65rem; font-weight: 900; margin: 0; color: #0f172a;" id="poster-name">Subject Name</h1>
+            <div style="font-size: 0.95rem; font-weight: 700; color: #dc2626; margin-top: 2px;" id="poster-case-id">CASE #101</div>
+          </div>
+          <div class="poster-details-grid">
+            <div class="poster-detail-item">
+              <span style="font-size: 0.72rem; color: #64748b; text-transform: uppercase; font-weight: 700; display: block;">Age & Gender</span>
+              <b id="poster-age-gender">21 Years / Male</b>
+            </div>
+            <div class="poster-detail-item">
+              <span style="font-size: 0.72rem; color: #64748b; text-transform: uppercase; font-weight: 700; display: block;">Clothing Description</span>
+              <b id="poster-clothes">Standard Clothes</b>
+            </div>
+            <div class="poster-detail-item" style="grid-column: span 2;">
+              <span style="font-size: 0.72rem; color: #64748b; text-transform: uppercase; font-weight: 700; display: block;">Last Known Sighting Location</span>
+              <b id="poster-loc" style="color: #b91c1c;">CAR STAND, Kurnool</b>
+            </div>
+            <div class="poster-detail-item" style="grid-column: span 2;">
+              <span style="font-size: 0.72rem; color: #64748b; text-transform: uppercase; font-weight: 700; display: block;">Assigned Search & Rescue Force</span>
+              <b id="poster-team">Police Command Kurnool</b>
+            </div>
+          </div>
+          <div class="poster-hotline">
+            🚨 IF SIGHTED, IMMEDIATELY CALL: 112 / 6303126628
+          </div>
+        </div>
+
+        <div class="poster-actions" style="display: flex; gap: 0.65rem; justify-content: center; margin-top: 1rem;">
+          <button class="btn btn-success" onclick="printPoster()">
+            🖨️ Print / Save PDF
+          </button>
+          <button class="btn btn-secondary" onclick="closePosterModal()">
+            ✕ Close
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Header Navigation -->
     <header>
       <div class="brand">
@@ -2105,9 +2218,26 @@ HTML_APP = """<!DOCTYPE html>
 
     <div class="container">
 
+      <!-- Live Telemetry Ticker & Audio Controls -->
+      <div class="telemetry-bar">
+        <div class="telemetry-pill">
+          <span class="live-dot"></span>
+          <span>TELEMETRY ACTIVE</span>
+        </div>
+        <div class="telemetry-content" id="telemetry-ticker">
+          SURVEILLANCE NODE CAM-01 active at CAR STAND (15.8281, 78.0373)
+        </div>
+        <div class="telemetry-actions">
+          <button class="telemetry-btn" id="btn-audio-toggle" onclick="toggleAudioAlert()" title="Toggle Synthesized Audio Alerts">
+            🔊 Audio Alert
+          </button>
+          <div class="telemetry-clock" id="telemetry-clock">00:00:00</div>
+        </div>
+      </div>
+
       <!-- Top Stats Counters -->
       <div class="stats-bar">
-        <div class="stat-box box-total">
+        <div class="stat-box box-total clickable" id="stat-box-total" onclick="handleStatCardClick('ALL')">
           <div class="stat-info">
             <div class="stat-title">Total Cases</div>
             <div class="stat-number c-total" id="cnt-total">0</div>
@@ -2115,7 +2245,7 @@ HTML_APP = """<!DOCTYPE html>
           </div>
           <div class="stat-icon">📋</div>
         </div>
-        <div class="stat-box box-active">
+        <div class="stat-box box-active clickable" id="stat-box-active" onclick="handleStatCardClick('ACTIVE')">
           <div class="stat-info">
             <div class="stat-title">Active Investigations</div>
             <div class="stat-number c-active" id="cnt-active">0</div>
@@ -2123,7 +2253,7 @@ HTML_APP = """<!DOCTYPE html>
           </div>
           <div class="stat-icon">🚨</div>
         </div>
-        <div class="stat-box box-closed">
+        <div class="stat-box box-closed clickable" id="stat-box-closed" onclick="handleStatCardClick('RESOLVED')">
           <div class="stat-info">
             <div class="stat-title">Rescued & Closed</div>
             <div class="stat-number c-closed" id="cnt-closed">0</div>
@@ -2131,7 +2261,7 @@ HTML_APP = """<!DOCTYPE html>
           </div>
           <div class="stat-icon">✅</div>
         </div>
-        <div class="stat-box box-teams">
+        <div class="stat-box box-teams clickable" id="stat-box-teams" onclick="handleStatCardClick('TEAMS')">
           <div class="stat-info">
             <div class="stat-title">Registered NGO Units</div>
             <div class="stat-number c-dispatch" id="cnt-teams">0</div>
@@ -2193,6 +2323,7 @@ HTML_APP = """<!DOCTYPE html>
             <div class="video-container" id="video-box">
               <div class="cctv-rec-badge">
                 <span style="color: #ef4444;">●</span> LIVE REC &bull; 1080p
+                <span id="webcam-live-indicator" style="display: none; margin-left: 6px; color: #10b981; font-weight: 800;">[WEBCAM LIVE]</span>
               </div>
               <div class="hud-brackets"></div>
               <video id="video-player" controls playsinline>
@@ -2207,7 +2338,7 @@ HTML_APP = """<!DOCTYPE html>
               </div>
             </div>
 
-            <div style="display: flex; gap: 0.65rem; margin-top: 1.15rem; flex-wrap: wrap;">
+            <div style="display: flex; gap: 0.65rem; margin-top: 1.15rem; flex-wrap: wrap; align-items: center;">
               <input type="file" id="video-file-input" accept="video/*" style="display: none;" onchange="handleVideoUpload(event)">
               <button class="btn btn-secondary btn-sm" onclick="document.getElementById('video-file-input').click()">
                 📁 Upload CCTV Video
@@ -2215,7 +2346,16 @@ HTML_APP = """<!DOCTYPE html>
               <button class="btn btn-secondary btn-sm" onclick="loadSampleVideo()">
                 🎬 Load Demo Video Feed
               </button>
-              <button class="btn btn-danger btn-sm" id="btn-run-scan" onclick="startVideoScan()" style="margin-left: auto;">
+              <button class="btn btn-secondary btn-sm" id="btn-webcam" onclick="toggleWebcam()">
+                📷 Live Webcam
+              </button>
+
+              <div style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.74rem; color: var(--text-muted); margin-left: auto;">
+                <span>Sensitivity:</span>
+                <input type="range" id="face-thresh-slider" min="0.10" max="0.60" step="0.02" value="0.32" style="width: 70px; accent-color: var(--accent);">
+              </div>
+
+              <button class="btn btn-danger btn-sm" id="btn-run-scan" onclick="startVideoScan()">
                 ⚡ AI Scan Video For Matches
               </button>
             </div>
@@ -2227,7 +2367,7 @@ HTML_APP = """<!DOCTYPE html>
                 <span style="font-weight: 800; color: #10b981; font-size: 0.98rem; display: flex; align-items: center; gap: 0.45rem;">
                   🚨 MATCH CONFIRMED IN SURVEILLANCE FEED
                 </span>
-                <span class="badge" style="background: #10b981;">Confidence 94.6%</span>
+                <span class="badge" style="background: #10b981;" id="match-confidence-badge">Confidence 94.6%</span>
               </div>
               <div style="font-size: 0.88rem; margin-top: 0.55rem; color: var(--text); line-height: 1.5;" id="match-details">
               </div>
@@ -2238,8 +2378,38 @@ HTML_APP = """<!DOCTYPE html>
           <div class="card">
             <div class="card-header">
               <div class="card-title">🗺️ Sighting Graph & Search Zone Perimeter</div>
-              <span class="reg-id">Kurnool Network &bull; Dijkstra</span>
+              <div style="display: flex; gap: 0.45rem; align-items: center;">
+                <button class="btn btn-secondary btn-sm" id="btn-map-add-cam" onclick="openAddCameraModal()" title="Install New Surveillance Node" style="font-size: 0.74rem; padding: 3px 8px;">
+                  📹 + Add Camera
+                </button>
+                <span class="reg-id">Kurnool Network &bull; Dijkstra</span>
+              </div>
             </div>
+
+            <!-- Map Controls Toolbar -->
+            <div class="map-toolbar">
+              <div class="map-toolbar-group">
+                <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Top Zones:</span>
+                <button class="pill-layer" id="zone-btn-3" onclick="setZoneCount(3)">Top 3</button>
+                <button class="pill-layer active" id="zone-btn-5" onclick="setZoneCount(5)">Top 5</button>
+                <button class="pill-layer" id="zone-btn-8" onclick="setZoneCount(8)">Top 8</button>
+              </div>
+
+              <div class="speed-slider-wrap">
+                <span>Speed:</span>
+                <input type="range" id="speed-slider" min="1.0" max="15.0" step="0.5" value="4.5" oninput="updateSearchZoneSpeed(this.value)">
+                <span id="speed-val" style="font-weight: 700; color: var(--accent); min-width: 48px;">4.5 km/h</span>
+              </div>
+
+              <div class="map-toolbar-group">
+                <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Layers:</span>
+                <button class="pill-layer active" id="layer-btn-cctv" onclick="toggleMapLayer('cctv')">CCTV</button>
+                <button class="pill-layer active" id="layer-btn-zones" onclick="toggleMapLayer('zones')">Zones</button>
+                <button class="pill-layer active" id="layer-btn-cases" onclick="toggleMapLayer('cases')">Cases</button>
+                <button class="pill-layer active" id="layer-btn-teams" onclick="toggleMapLayer('teams')">Teams</button>
+              </div>
+            </div>
+
             <div id="admin-map"></div>
           </div>
         </div>
@@ -2528,12 +2698,12 @@ HTML_APP = """<!DOCTYPE html>
 
     // LIVE DIGITAL CLOCK
     function updateClock() {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
       const el = document.getElementById('live-clock');
-      if (el) {
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
-        el.innerText = `🕒 ${timeStr} IST`;
-      }
+      if (el) el.innerText = `🕒 ${timeStr} IST`;
+      const tel = document.getElementById('telemetry-clock');
+      if (tel) tel.innerText = `${timeStr} IST`;
     }
     setInterval(updateClock, 1000);
     updateClock();
@@ -2948,6 +3118,11 @@ HTML_APP = """<!DOCTYPE html>
         ngoGroup.style.display = 'none';
       } else {
         ngoGroup.style.display = 'block';
+        if (!allTeams || allTeams.length === 0) {
+          loadTeams().then(() => populateLoginNgoChoice());
+        } else {
+          populateLoginNgoChoice();
+        }
         handleNgoChoiceChange();
         lbl.innerText = 'Search Party / NGO Unit ID';
       }
@@ -3467,54 +3642,67 @@ HTML_APP = """<!DOCTYPE html>
       const c = allCases.find(item => item.id === caseId) || allCases[0];
       if (!c) return;
 
-      document.getElementById('dossier-id-badge').innerText = `CASE #${c.id}`;
-      document.getElementById('dossier-name').innerText = c.name;
+      const badge = document.getElementById('dossier-id-badge');
+      if (badge) badge.innerText = `CASE #${c.id}`;
+      const nameEl = document.getElementById('dossier-name');
+      if (nameEl) nameEl.innerText = c.name;
       
       const tag = document.getElementById('dossier-status-tag');
-      tag.innerText = c.status;
-      tag.className = `tag ${c.status === 'ACTIVE' ? 'tag-active' : (c.status === 'RESCUED' ? 'tag-rescued' : 'tag-closed')}`;
+      if (tag) {
+        tag.innerText = c.status;
+        tag.className = `tag ${c.status === 'ACTIVE' ? 'tag-active' : (c.status === 'RESCUED' ? 'tag-rescued' : 'tag-closed')}`;
+      }
 
-      document.getElementById('dossier-age-gender').innerText = `${c.age} Years / ${c.gender}`;
-      document.getElementById('dossier-clothes').innerText = c.clothes || 'Standard Attire';
-      document.getElementById('dossier-loc').innerText = c.last_seen_location;
-      document.getElementById('dossier-team').innerText = c.assigned_team || 'Unassigned';
-      document.getElementById('dossier-coords').innerText = `${(c.lat || 15.8281).toFixed(4)}, ${(c.lon || 78.0373).toFixed(4)}`;
+      const ageGen = document.getElementById('dossier-age-gender');
+      if (ageGen) ageGen.innerText = `${c.age} Years / ${c.gender}`;
+      const clothes = document.getElementById('dossier-clothes');
+      if (clothes) clothes.innerText = c.clothes || 'Standard Attire';
+      const loc = document.getElementById('dossier-loc');
+      if (loc) loc.innerText = c.last_seen_location;
+      const team = document.getElementById('dossier-team');
+      if (team) team.innerText = c.assigned_team || 'Unassigned';
+      const coords = document.getElementById('dossier-coords');
+      if (coords) coords.innerText = `${(c.lat || 15.8281).toFixed(4)}, ${(c.lon || 78.0373).toFixed(4)}`;
 
       const stepper = document.getElementById('dossier-timeline');
-      const isResolved = c.status === 'RESCUED' || c.status === 'CLOSED';
-      stepper.innerHTML = `
-        <div class="timeline-step completed">
-          <div class="timeline-step-title">1. Missing Person Report Filed</div>
-          <div class="timeline-step-desc">First notice registered in Central Command by Kurnool Division.</div>
-        </div>
-        <div class="timeline-step completed">
-          <div class="timeline-step-title">2. Last Known Sighting Verified</div>
-          <div class="timeline-step-desc">Subject spotted at <b>${c.last_seen_location}</b>; initial coordinates logged.</div>
-        </div>
-        <div class="timeline-step completed">
-          <div class="timeline-step-title">3. Surveillance Sighting Graph Activated</div>
-          <div class="timeline-step-desc">Surveillance camera vertices and mobility speed perimeters calibrated for tracking.</div>
-        </div>
-        <div class="timeline-step ${isResolved ? 'completed' : 'active-step'}">
-          <div class="timeline-step-title">4. Ground Search Unit Dispatched</div>
-          <div class="timeline-step-desc">Dispatched to <b>${c.assigned_team || 'Rescue Unit'}</b> with automated SMS alert.</div>
-        </div>
-        <div class="timeline-step ${isResolved ? 'completed' : ''}">
-          <div class="timeline-step-title">${isResolved ? '5. Subject Safely Rescued & Reunited' : '5. Search Operation Ongoing'}</div>
-          <div class="timeline-step-desc">${isResolved ? 'Field team verified and case successfully closed.' : 'Active field search and CCTV monitoring in progress.'}</div>
-        </div>
-      `;
+      if (stepper) {
+        const isResolved = c.status === 'RESCUED' || c.status === 'CLOSED';
+        stepper.innerHTML = `
+          <div class="timeline-step completed">
+            <div class="timeline-step-title">1. Missing Person Report Filed</div>
+            <div class="timeline-step-desc">First notice registered in Central Command by Kurnool Division.</div>
+          </div>
+          <div class="timeline-step completed">
+            <div class="timeline-step-title">2. Last Known Sighting Verified</div>
+            <div class="timeline-step-desc">Subject spotted at <b>${c.last_seen_location}</b>; initial coordinates logged.</div>
+          </div>
+          <div class="timeline-step completed">
+            <div class="timeline-step-title">3. Surveillance Sighting Graph Activated</div>
+            <div class="timeline-step-desc">Surveillance camera vertices and mobility speed perimeters calibrated for tracking.</div>
+          </div>
+          <div class="timeline-step ${isResolved ? 'completed' : 'active-step'}">
+            <div class="timeline-step-title">4. Ground Search Unit Dispatched</div>
+            <div class="timeline-step-desc">Dispatched to <b>${c.assigned_team || 'Rescue Unit'}</b> with automated SMS alert.</div>
+          </div>
+          <div class="timeline-step ${isResolved ? 'completed' : ''}">
+            <div class="timeline-step-title">${isResolved ? '5. Subject Safely Rescued & Reunited' : '5. Search Operation Ongoing'}</div>
+            <div class="timeline-step-desc">${isResolved ? 'Field team verified and case successfully closed.' : 'Active field search and CCTV monitoring in progress.'}</div>
+          </div>
+        `;
+      }
 
       const resBtn = document.getElementById('btn-dossier-resolve');
       if (resBtn) {
         resBtn.style.display = (c.status === 'ACTIVE') ? 'inline-block' : 'none';
       }
 
-      document.getElementById('case-dossier-modal').style.display = 'flex';
+      const modal = document.getElementById('case-dossier-modal');
+      if (modal) modal.style.display = 'flex';
     }
 
     function closeCaseDossier() {
-      document.getElementById('case-dossier-modal').style.display = 'none';
+      const modal = document.getElementById('case-dossier-modal');
+      if (modal) modal.style.display = 'none';
       currentDossierCaseId = null;
     }
 
@@ -3562,18 +3750,30 @@ HTML_APP = """<!DOCTYPE html>
       const c = allCases.find(item => item.id === caseId) || allCases[0];
       if (!c) return;
 
-      document.getElementById('poster-name').innerText = c.name;
-      document.getElementById('poster-case-id').innerText = `#${c.id}`;
-      document.getElementById('poster-age-gender').innerText = `${c.age} Years / ${c.gender}`;
-      document.getElementById('poster-clothes').innerText = c.clothes || 'Standard Clothes';
-      document.getElementById('poster-loc').innerText = c.last_seen_location;
-      document.getElementById('poster-team').innerText = c.assigned_team || 'Police Command Kurnool';
+      const pName = document.getElementById('poster-name');
+      if (pName) pName.innerText = c.name;
+      const pId = document.getElementById('poster-case-id');
+      if (pId) pId.innerText = `#${c.id}`;
+      const pAge = document.getElementById('poster-age-gender');
+      if (pAge) pAge.innerText = `${c.age} Years / ${c.gender}`;
+      const pClothes = document.getElementById('poster-clothes');
+      if (pClothes) pClothes.innerText = c.clothes || 'Standard Clothes';
+      const pLoc = document.getElementById('poster-loc');
+      if (pLoc) pLoc.innerText = c.last_seen_location;
+      const pTeam = document.getElementById('poster-team');
+      if (pTeam) pTeam.innerText = c.assigned_team || 'Police Command Kurnool';
 
-      document.getElementById('poster-modal').style.display = 'flex';
+      const modal = document.getElementById('poster-modal');
+      if (modal) modal.style.display = 'flex';
     }
 
     function closePosterModal() {
-      document.getElementById('poster-modal').style.display = 'none';
+      const modal = document.getElementById('poster-modal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function printPoster() {
+      window.print();
     }
 
     function copyPosterLink() {
@@ -4195,6 +4395,7 @@ HTML_APP = """<!DOCTYPE html>
 
     async function markCaseResolved(id) {
       try {
+        closeCaseDossier();
         await fetch('/api/resolve-dispatch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -4264,8 +4465,10 @@ HTML_APP = """<!DOCTYPE html>
       if (webcamStream) {
         webcamStream.getTracks().forEach(track => track.stop());
         webcamStream = null;
-        document.getElementById('webcam-live-indicator').style.display = 'none';
-        document.getElementById('btn-webcam').innerText = '📷 Live Webcam';
+        const ind = document.getElementById('webcam-live-indicator');
+        if (ind) ind.style.display = 'none';
+        const b = document.getElementById('btn-webcam');
+        if (b) b.innerText = '📷 Live Webcam';
       }
       const video = document.getElementById('video-player');
       video.srcObject = null;
@@ -4279,8 +4482,10 @@ HTML_APP = """<!DOCTYPE html>
       if (webcamStream) {
         webcamStream.getTracks().forEach(track => track.stop());
         webcamStream = null;
-        document.getElementById('webcam-live-indicator').style.display = 'none';
-        document.getElementById('btn-webcam').innerText = '📷 Live Webcam';
+        const ind = document.getElementById('webcam-live-indicator');
+        if (ind) ind.style.display = 'none';
+        const b = document.getElementById('btn-webcam');
+        if (b) b.innerText = '📷 Live Webcam';
       }
       const video = document.getElementById('video-player');
       video.srcObject = null;
@@ -4373,25 +4578,31 @@ HTML_APP = """<!DOCTYPE html>
       const status = document.getElementById('scan-status');
       const matchBox = document.getElementById('match-box');
       const camSelect = document.getElementById('video-camera-loc');
-      const selectedCamText = camSelect.options[camSelect.selectedIndex].text;
-      const selectedCamKey = camSelect.value;
-      const threshVal = parseFloat(document.getElementById('face-thresh-slider').value) || 0.32;
+      const selectedCamText = camSelect ? (camSelect.options[camSelect.selectedIndex] ? camSelect.options[camSelect.selectedIndex].text : camSelect.value) : "Camera Node";
+      const selectedCamKey = camSelect ? camSelect.value : "CAR STAND";
+      const threshSlider = document.getElementById('face-thresh-slider');
+      const threshVal = threshSlider ? (parseFloat(threshSlider.value) || 0.32) : 0.32;
 
-      radar.style.display = 'block';
-      radar.style.animation = 'radarSweep 2s infinite linear';
-      status.style.display = 'block';
-      status.innerText = `Scanning video frames at ${selectedCamKey} with DeepFace ArcFace (Threshold: ${threshVal.toFixed(2)})...`;
+      if (radar) {
+        radar.style.display = 'block';
+        radar.style.animation = 'radarSweep 2s infinite linear';
+      }
+      if (status) {
+        status.style.display = 'block';
+        status.innerText = `Scanning video frames at ${selectedCamKey} with DeepFace ArcFace (Threshold: ${threshVal.toFixed(2)})...`;
+      }
 
       setTimeout(async () => {
-        radar.style.display = 'none';
-        status.innerText = `Scan complete. Confirmed match identified at ${selectedCamKey}.`;
-        matchBox.style.display = 'block';
+        if (radar) radar.style.display = 'none';
+        if (status) status.innerText = `Scan complete. Confirmed match identified at ${selectedCamKey}.`;
+        if (matchBox) matchBox.style.display = 'block';
 
         const matchPerson = allCases.length > 0 ? allCases[0].name : "N.K.SYAM";
         const matchCaseId = allCases.length > 0 ? allCases[0].id : 1;
         const targetTeamName = loggedInTeam ? loggedInTeam.name : (allTeams.length > 0 ? allTeams[0].name : "Helping Hands NGO");
 
-        document.getElementById('match-confidence-badge').innerText = `Confidence 94.6% (Thresh: ${threshVal.toFixed(2)})`;
+        const confBadge = document.getElementById('match-confidence-badge');
+        if (confBadge) confBadge.innerText = `Confidence 94.6% (Thresh: ${threshVal.toFixed(2)})`;
         document.getElementById('match-details').innerHTML = `
           Person: <b>${matchPerson}</b> (Case #${matchCaseId})<br>
           Camera Location: <b>${selectedCamText}</b><br>
