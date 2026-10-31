@@ -458,220 +458,957 @@ HTML_APP = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Missing Person Search-and-Track System (Problem Statement 112)</title>
+  <title>Missing Person Search-and-Track System • Problem Statement 112</title>
+  
+  <!-- Modern Typography: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet GIS Map CSS & JS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
   <style>
     :root {
-      --bg: #070d19;
-      --card: #131d31;
-      --card-border: #22324e;
-      --header-bg: #040812;
+      --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      
+      /* Dark Theme - High-Tech Tactical Glassmorphism */
+      --bg: #070b14;
+      --bg-gradient: radial-gradient(circle at 50% -10%, #111e3b 0%, #070b14 80%);
+      --card: rgba(15, 23, 42, 0.78);
+      --card-solid: #0f172a;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-border-glow: rgba(56, 189, 248, 0.28);
+      --header-bg: rgba(7, 11, 20, 0.88);
       --text: #f8fafc;
       --text-muted: #94a3b8;
-      --table-head: #08101e;
-      --table-hover: rgba(255, 255, 255, 0.03);
-      --input-bg: #08101e;
+      --text-dim: #64748b;
+      --table-head: rgba(13, 20, 36, 0.95);
+      --table-hover: rgba(56, 189, 248, 0.05);
+      --input-bg: rgba(11, 18, 33, 0.85);
+      --input-border: rgba(255, 255, 255, 0.12);
       --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.35);
       --accent-hover: #0284c7;
       --success: #10b981;
+      --success-glow: rgba(16, 185, 129, 0.35);
       --warning: #f59e0b;
-      --danger: #ef4444;
+      --warning-glow: rgba(245, 158, 11, 0.35);
+      --danger: #f43f5e;
+      --danger-glow: rgba(244, 63, 94, 0.35);
       --purple: #a855f7;
-      --shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      --purple-glow: rgba(168, 85, 247, 0.35);
+      --shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      --modal-bg: rgba(15, 23, 42, 0.95);
+      --hud-overlay: rgba(56, 189, 248, 0.12);
     }
 
     [data-theme="light"] {
-      --bg: #f1f5f9;
-      --card: #ffffff;
-      --card-border: #cbd5e1;
-      --header-bg: #ffffff;
+      --bg: #f8fafc;
+      --bg-gradient: radial-gradient(circle at 50% -10%, #e2e8f0 0%, #f8fafc 85%);
+      --card: rgba(255, 255, 255, 0.92);
+      --card-solid: #ffffff;
+      --card-border: rgba(226, 232, 240, 0.95);
+      --card-border-glow: rgba(2, 132, 199, 0.25);
+      --header-bg: rgba(255, 255, 255, 0.94);
       --text: #0f172a;
       --text-muted: #64748b;
-      --table-head: #f8fafc;
-      --table-hover: rgba(0, 0, 0, 0.03);
-      --input-bg: #f8fafc;
+      --text-dim: #94a3b8;
+      --table-head: #f1f5f9;
+      --table-hover: rgba(2, 132, 199, 0.04);
+      --input-bg: #ffffff;
+      --input-border: #cbd5e1;
       --accent: #0284c7;
+      --accent-glow: rgba(2, 132, 199, 0.25);
       --accent-hover: #0369a1;
       --success: #059669;
+      --success-glow: rgba(5, 150, 105, 0.25);
       --warning: #d97706;
-      --danger: #dc2626;
+      --warning-glow: rgba(217, 119, 6, 0.25);
+      --danger: #e11d48;
+      --danger-glow: rgba(225, 29, 72, 0.25);
       --purple: #7c3aed;
-      --shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      --purple-glow: rgba(124, 58, 237, 0.25);
+      --shadow: 0 12px 28px -6px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
+      --modal-bg: #ffffff;
+      --hud-overlay: rgba(2, 132, 199, 0.08);
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease; }
-    body { background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: var(--font-main);
+      transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+    }
 
-    /* SEPARATE FULL-SCREEN DEDICATED LOGIN PAGE */
+    body {
+      background: var(--bg);
+      background-image: var(--bg-gradient);
+      background-attachment: fixed;
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* CODE & MONO STYLES */
+    .mono { font-family: var(--font-mono); }
+
+    /* DEDICATED FULL-SCREEN LOGIN */
     #screen-login {
       display: flex;
       align-items: center;
       justify-content: center;
       min-height: 100vh;
-      padding: 1.5rem;
-      background: var(--bg);
-      background-image: radial-gradient(circle at 50% 20%, rgba(56, 189, 248, 0.08), transparent 70%);
-    }
-    .login-container {
-      width: 100%;
-      max-width: 480px;
-      background: var(--card);
-      border: 1px solid var(--card-border);
-      border-radius: 14px;
-      padding: 2.25rem 2rem;
-      box-shadow: var(--shadow);
+      padding: 2rem 1.5rem;
       position: relative;
     }
+
+    .login-container {
+      width: 100%;
+      max-width: 490px;
+      background: var(--card);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 2.75rem 2.25rem;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .login-container::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--accent), var(--purple), var(--success));
+    }
+
+    .login-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1.5rem;
+    }
+
     .login-logo {
-      width: 48px;
-      height: 48px;
-      background: rgba(56, 189, 248, 0.15);
-      border: 1px solid var(--accent);
-      border-radius: 12px;
+      width: 54px;
+      height: 54px;
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.15), rgba(168, 85, 247, 0.12));
+      border: 1px solid var(--card-border-glow);
+      border-radius: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.6rem;
-      margin-bottom: 1rem;
+      font-size: 1.85rem;
+      box-shadow: 0 4px 16px rgba(56, 189, 248, 0.15);
     }
+
     .role-toggle {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 0.5rem;
       background: var(--input-bg);
-      padding: 0.3rem;
-      border-radius: 8px;
+      padding: 0.35rem;
+      border-radius: 10px;
       border: 1px solid var(--card-border);
-      margin: 1.25rem 0;
+      margin: 1.5rem 0;
     }
+
     .role-btn {
-      padding: 0.6rem 0.5rem;
-      font-size: 0.85rem;
-      font-weight: 600;
+      padding: 0.7rem 0.6rem;
+      font-size: 0.88rem;
+      font-weight: 700;
       border: none;
-      border-radius: 6px;
+      border-radius: 8px;
       background: transparent;
       color: var(--text-muted);
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      transition: all 0.2s ease;
     }
+
+    .role-btn:hover {
+      color: var(--text);
+    }
+
     .role-btn.active {
-      background: var(--card);
+      background: var(--card-solid);
       color: var(--accent);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     }
 
     /* TOP NAVBAR */
-    header { background: var(--header-bg); border-bottom: 1px solid var(--card-border); padding: 0.9rem 1.75rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
-    .brand h1 { font-size: 1.35rem; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 0.5rem; }
-    .badge { background: #0284c7; color: #fff; font-size: 0.72rem; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 9999px; }
-    .reg-id { background: var(--card); color: var(--text-muted); font-size: 0.72rem; padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid var(--card-border); font-family: monospace; }
-    
-    .nav-actions { display: flex; align-items: center; gap: 0.75rem; }
-    .user-pill { background: var(--card); border: 1px solid var(--card-border); border-radius: 9999px; padding: 0.35rem 0.85rem; font-size: 0.82rem; display: flex; align-items: center; gap: 0.5rem; }
-    .user-pill .dot { width: 8px; height: 8px; border-radius: 50%; }
-    .role-admin { background: #ef4444; }
-    .role-ngo { background: #10b981; }
+    header {
+      background: var(--header-bg);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--card-border);
+      padding: 0.85rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
 
-    /* BUTTONS */
-    .btn { background: var(--accent); color: #fff; font-weight: 600; padding: 0.5rem 1rem; border-radius: 6px; border: none; cursor: pointer; transition: 0.15s; font-size: 0.85rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; }
-    .btn:hover { background: var(--accent-hover); transform: translateY(-1px); }
-    .btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--card-border); }
-    .btn-secondary:hover { background: var(--input-bg); }
-    .btn-success { background: var(--success); color: #fff; }
-    .btn-success:hover { filter: brightness(1.1); }
-    .btn-danger { background: var(--danger); color: #fff; }
-    .btn-danger:hover { filter: brightness(1.1); }
-    .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.75rem; border-radius: 5px; }
-    .theme-toggle-btn { background: var(--card); border: 1px solid var(--card-border); border-radius: 8px; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.1rem; color: var(--text); }
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
 
-    .container { max-width: 1320px; width: 100%; margin: 1.5rem auto; padding: 0 1rem; flex: 1; }
+    .brand-title {
+      font-size: 1.32rem;
+      font-weight: 800;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      letter-spacing: -0.02em;
+    }
 
-    /* STATS COUNTERS */
-    .stats-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-    .stat-box { background: var(--card); border: 1px solid var(--card-border); border-radius: 10px; padding: 1.1rem 1.25rem; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow); }
-    .stat-title { font-size: 0.76rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; letter-spacing: 0.05em; }
-    .stat-number { font-size: 1.95rem; font-weight: 800; margin-top: 0.2rem; }
-    .stat-icon { font-size: 1.7rem; opacity: 0.85; }
+    .brand-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    .pulse-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 10px var(--success);
+      display: inline-block;
+      animation: livePulse 2s infinite ease-in-out;
+    }
+
+    @keyframes livePulse {
+      0% { transform: scale(0.9); opacity: 0.7; }
+      50% { transform: scale(1.3); opacity: 1; }
+      100% { transform: scale(0.9); opacity: 0.7; }
+    }
+
+    .badge {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.25rem 0.6rem;
+      border-radius: 9999px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      box-shadow: 0 2px 6px rgba(2, 132, 199, 0.25);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .reg-id {
+      background: var(--card);
+      color: var(--accent);
+      font-size: 0.72rem;
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      border: 1px solid var(--card-border);
+      font-family: var(--font-mono);
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .clock-badge {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--card);
+      padding: 0.35rem 0.75rem;
+      border-radius: 8px;
+      border: 1px solid var(--card-border);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .user-pill {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 9999px;
+      padding: 0.35rem 0.95rem;
+      font-size: 0.82rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .user-pill .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+    }
+
+    .role-admin { background: #ef4444; box-shadow: 0 0 10px rgba(239, 68, 68, 0.6); }
+    .role-ngo { background: #10b981; box-shadow: 0 0 10px rgba(16, 185, 129, 0.6); }
+
+    /* MODERN BUTTONS */
+    .btn {
+      background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+      color: #fff;
+      font-weight: 700;
+      padding: 0.55rem 1.15rem;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      font-size: 0.86rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      box-shadow: 0 4px 14px var(--accent-glow);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px var(--accent-glow);
+      filter: brightness(1.08);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn-secondary {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--card-border);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .btn-secondary:hover {
+      background: var(--input-bg);
+      border-color: var(--card-border-glow);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+    }
+
+    .btn-success {
+      background: linear-gradient(135deg, var(--success), #059669);
+      color: #fff;
+      box-shadow: 0 4px 14px var(--success-glow);
+    }
+
+    .btn-success:hover {
+      box-shadow: 0 6px 20px var(--success-glow);
+      filter: brightness(1.08);
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, var(--danger), #e11d48);
+      color: #fff;
+      box-shadow: 0 4px 14px var(--danger-glow);
+    }
+
+    .btn-danger:hover {
+      box-shadow: 0 6px 20px var(--danger-glow);
+      filter: brightness(1.08);
+    }
+
+    .btn-sm {
+      padding: 0.38rem 0.75rem;
+      font-size: 0.78rem;
+      border-radius: 6px;
+    }
+
+    .theme-toggle-btn {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      width: 38px;
+      height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 1.15rem;
+      color: var(--text);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      transition: all 0.2s ease;
+    }
+
+    .theme-toggle-btn:hover {
+      border-color: var(--card-border-glow);
+      transform: rotate(18deg) scale(1.05);
+    }
+
+    .container {
+      max-width: 1400px;
+      width: 100%;
+      margin: 1.5rem auto;
+      padding: 0 1.25rem;
+      flex: 1;
+    }
+
+    /* STATS COUNTERS HUD */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-box {
+      background: var(--card);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.35rem 1.45rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+      transition: all 0.25s ease;
+    }
+
+    .stat-box:hover {
+      border-color: var(--card-border-glow);
+      transform: translateY(-3px);
+      box-shadow: 0 18px 40px -8px rgba(0, 0, 0, 0.45);
+    }
+
+    .stat-box::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+    }
+
+    .stat-box.box-total::before { background: var(--accent); }
+    .stat-box.box-active::before { background: var(--warning); }
+    .stat-box.box-closed::before { background: var(--success); }
+    .stat-box.box-teams::before { background: var(--purple); }
+
+    .stat-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .stat-title {
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+
+    .stat-number {
+      font-family: var(--font-mono);
+      font-size: 2.2rem;
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+
+    .stat-sub {
+      font-size: 0.74rem;
+      font-weight: 600;
+      margin-top: 0.35rem;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .stat-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.7rem;
+    }
+
     .c-total { color: var(--accent); }
     .c-active { color: var(--warning); }
     .c-closed { color: var(--success); }
     .c-dispatch { color: var(--purple); }
 
+    .stat-box.box-total .stat-icon { background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.25); }
+    .stat-box.box-active .stat-icon { background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.25); }
+    .stat-box.box-closed .stat-icon { background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.25); }
+    .stat-box.box-teams .stat-icon { background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.25); }
+
     /* PORTAL TABS */
-    .tab-bar { display: flex; gap: 0.5rem; border-bottom: 1px solid var(--card-border); margin-bottom: 1.25rem; }
-    .tab-btn { background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); padding: 0.65rem 1.25rem; font-size: 0.92rem; font-weight: 700; cursor: pointer; transition: 0.15s; }
-    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-bar {
+      display: flex;
+      gap: 0.65rem;
+      border-bottom: 1px solid var(--card-border);
+      margin-bottom: 1.5rem;
+      align-items: center;
+    }
 
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem; }
-    @media (max-width: 990px) { .grid-2 { grid-template-columns: 1fr; } }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      border-bottom: 3px solid transparent;
+      color: var(--text-muted);
+      padding: 0.75rem 1.45rem;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+    }
 
-    .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 10px; padding: 1.35rem; display: flex; flex-direction: column; box-shadow: var(--shadow); }
-    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; }
-    .card-title { font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; color: var(--text); }
+    .tab-btn:hover {
+      color: var(--text);
+    }
 
-    #admin-map, #ngo-map { height: 440px; border-radius: 8px; border: 1px solid var(--card-border); z-index: 1; }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
 
-    /* VIDEO SCANNER */
-    .video-container { position: relative; width: 100%; height: 280px; background: #000; border-radius: 8px; overflow: hidden; border: 1px solid var(--card-border); display: flex; align-items: center; justify-content: center; }
-    #video-player { width: 100%; height: 100%; object-fit: contain; }
-    #canvas-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-    .scan-radar { position: absolute; width: 100%; height: 3px; background: #38bdf8; box-shadow: 0 0 15px #38bdf8; top: 0; display: none; }
-    @keyframes radarSweep { 0% { top: 0%; } 50% { top: 96%; } 100% { top: 0%; } }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
 
-    .match-alert { background: rgba(16, 185, 129, 0.12); border: 1px solid var(--success); border-radius: 8px; padding: 1rem; margin-top: 1rem; }
-    
+    @media (max-width: 1024px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--card);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--card-border);
+      border-radius: 18px;
+      padding: 1.65rem;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow);
+      position: relative;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.15rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      color: var(--text);
+      letter-spacing: -0.01em;
+    }
+
+    #admin-map, #ngo-map {
+      height: 460px;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+      z-index: 1;
+      overflow: hidden;
+      box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.25);
+    }
+
+    /* TACTICAL VIDEO SCANNER */
+    .video-container {
+      position: relative;
+      width: 100%;
+      height: 310px;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--card-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.8);
+    }
+
+    #video-player {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    #canvas-overlay {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .hud-brackets {
+      position: absolute;
+      inset: 12px;
+      pointer-events: none;
+      border: 2px dashed rgba(56, 189, 248, 0.25);
+      border-radius: 8px;
+    }
+
+    .cctv-rec-badge {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(6px);
+      border: 1px solid rgba(244, 63, 94, 0.4);
+      color: #fff;
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      padding: 0.25rem 0.65rem;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      z-index: 2;
+    }
+
+    .scan-radar {
+      position: absolute;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      box-shadow: 0 0 20px var(--accent), 0 0 40px var(--accent);
+      top: 0;
+      display: none;
+      z-index: 3;
+    }
+
+    @keyframes radarSweep {
+      0% { top: 0%; opacity: 0.8; }
+      50% { top: 96%; opacity: 1; }
+      100% { top: 0%; opacity: 0.8; }
+    }
+
+    .match-alert {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(56, 189, 248, 0.08));
+      border: 1px solid var(--success);
+      border-radius: 12px;
+      padding: 1.15rem;
+      margin-top: 1rem;
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.15);
+      animation: alertSlideIn 0.3s ease;
+    }
+
+    @keyframes alertSlideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     /* ROUTE CALLOUT */
-    .route-callout { background: rgba(56, 189, 248, 0.08); border: 1px solid var(--accent); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.25rem; }
-    .route-stats { display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 0.65rem; }
-    .route-item { display: flex; flex-direction: column; }
-    .route-val { font-size: 1.6rem; font-weight: 800; color: var(--text); }
-    .route-lbl { font-size: 0.74rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; }
+    .route-callout {
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(168, 85, 247, 0.06));
+      border: 1px solid var(--card-border-glow);
+      border-radius: 18px;
+      padding: 1.65rem;
+      margin-bottom: 1.5rem;
+      box-shadow: var(--shadow);
+    }
+
+    .route-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.5rem;
+      margin-top: 1.15rem;
+    }
+
+    .route-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+      background: var(--input-bg);
+      padding: 0.95rem 1.15rem;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+    }
+
+    .route-val {
+      font-family: var(--font-mono);
+      font-size: 1.85rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .route-lbl {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+    }
 
     /* SEARCH & FILTER BAR */
-    .filter-bar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
-    .search-input { background: var(--input-bg); border: 1px solid var(--card-border); color: var(--text); padding: 0.45rem 0.85rem; border-radius: 6px; font-size: 0.85rem; width: 260px; }
+    .filter-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.15rem;
+      flex-wrap: wrap;
+    }
 
-    /* TABLES */
-    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-    th { text-align: left; padding: 0.75rem 0.6rem; background: var(--table-head); color: var(--text-muted); border-bottom: 1px solid var(--card-border); font-weight: 700; }
-    td { padding: 0.75rem 0.6rem; border-bottom: 1px solid var(--card-border); }
-    tr:hover td { background: var(--table-hover); }
-    .tag { font-size: 0.72rem; font-weight: 700; padding: 0.25rem 0.55rem; border-radius: 4px; text-transform: uppercase; }
-    .tag-active { background: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.4); }
-    .tag-rescued { background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.4); }
-    .tag-closed { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); border: 1px solid var(--card-border); }
+    .search-input {
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      padding: 0.6rem 1rem;
+      border-radius: 10px;
+      font-size: 0.88rem;
+      width: 290px;
+      transition: all 0.2s ease;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    /* MODERN TABLES */
+    .table-container {
+      overflow-x: auto;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+
+    th {
+      text-align: left;
+      padding: 0.95rem 0.85rem;
+      background: var(--table-head);
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--card-border);
+      font-weight: 700;
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    td {
+      padding: 0.95rem 0.85rem;
+      border-bottom: 1px solid var(--card-border);
+      vertical-align: middle;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: var(--table-hover);
+    }
+
+    .tag {
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 0.3rem 0.65rem;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .tag-active {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+
+    .tag-rescued {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+
+    .tag-closed {
+      background: rgba(148, 163, 184, 0.15);
+      color: var(--text-muted);
+      border: 1px solid var(--card-border);
+    }
 
     /* MODALS */
-    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 9999; }
-    .modal-box { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; width: 100%; max-width: 500px; padding: 1.75rem; box-shadow: var(--shadow); }
-    .modal-box h2 { font-size: 1.25rem; margin-bottom: 0.4rem; color: var(--text); }
-    .form-group { margin-bottom: 0.9rem; display: flex; flex-direction: column; gap: 0.35rem; }
-    .form-group label { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; }
-    .form-group input, .form-group select, .form-group textarea { background: var(--input-bg); border: 1px solid var(--card-border); color: var(--text); padding: 0.55rem 0.75rem; border-radius: 6px; font-size: 0.9rem; }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(4, 7, 14, 0.75);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      padding: 1.5rem;
+      animation: modalFadeIn 0.25s ease;
+    }
+
+    @keyframes modalFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .modal-box {
+      background: var(--card-solid);
+      border: 1px solid var(--card-border-glow);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 540px;
+      padding: 2.25rem 2rem;
+      box-shadow: var(--shadow);
+      position: relative;
+      animation: modalPopUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes modalPopUp {
+      from { opacity: 0; transform: translateY(20px) scale(0.97); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .modal-box h2 {
+      font-size: 1.35rem;
+      margin-bottom: 0.45rem;
+      color: var(--text);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .form-group {
+      margin-bottom: 1.05rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .form-group label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .form-group input, .form-group select, .form-group textarea {
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      color: var(--text);
+      padding: 0.65rem 0.95rem;
+      border-radius: 8px;
+      font-size: 0.92rem;
+      font-family: var(--font-main);
+      transition: all 0.2s ease;
+    }
+
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
 
     /* NOTIFICATIONS */
     .notif-card {
       background: var(--input-bg);
       border: 1px solid var(--card-border);
-      border-radius: 8px;
-      padding: 0.85rem;
+      border-radius: 12px;
+      padding: 1.05rem;
       display: flex;
       flex-direction: column;
-      gap: 0.45rem;
+      gap: 0.55rem;
       position: relative;
+      transition: all 0.2s ease;
     }
+
+    .notif-card:hover {
+      border-color: var(--card-border-glow);
+      transform: translateX(3px);
+    }
+
     .notif-card.unread {
       border-left: 4px solid var(--danger);
-      background: rgba(239, 68, 68, 0.05);
+      background: linear-gradient(90deg, rgba(244, 63, 94, 0.08), var(--input-bg));
     }
+
     .notif-badge-pulse {
       animation: pulseAlert 1.6s infinite ease-in-out;
     }
+
     @keyframes pulseAlert {
       0% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.15); opacity: 0.85; }
+      50% { transform: scale(1.18); opacity: 0.85; }
       100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* TOAST */
+    #toast-msg {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background: var(--card-solid);
+      border: 1px solid var(--accent);
+      color: var(--text);
+      padding: 0.85rem 1.45rem;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 0.88rem;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+      z-index: 100000;
+      display: none;
+      animation: toastSlideUp 0.3s ease;
+    }
+
+    @keyframes toastSlideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
     }
   </style>
 </head>
@@ -680,15 +1417,15 @@ HTML_APP = """<!DOCTYPE html>
   <!-- SCREEN 1: SEPARATE DEDICATED LOGIN PAGE -->
   <div id="screen-login">
     <div class="login-container">
-      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+      <div class="login-header-row">
         <div class="login-logo">🔍</div>
         <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">🌓</button>
       </div>
 
-      <h2 style="font-size: 1.35rem; font-weight: 800; color: var(--text); margin-bottom: 0.25rem;">
+      <h2 style="font-size: 1.45rem; font-weight: 800; color: var(--text); margin-bottom: 0.3rem; letter-spacing: -0.02em;">
         Missing Person Search-and-Track
       </h2>
-      <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">
+      <div style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1.25rem;">
         Problem Statement 112 &bull; Role-Based Emergency & Field Rescue Portal
       </div>
 
@@ -719,13 +1456,13 @@ HTML_APP = """<!DOCTYPE html>
           <input type="password" id="login-pass" value="admin123" required />
         </div>
 
-        <button type="submit" class="btn" style="width: 100%; padding: 0.75rem; margin-top: 0.5rem; font-size: 0.95rem;">
+        <button type="submit" class="btn" style="width: 100%; padding: 0.85rem; margin-top: 0.75rem; font-size: 0.95rem;">
           Authenticate & Access Dashboard ➔
         </button>
       </form>
 
-      <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-muted);">
-        <div>Reg: <b>25091A32M7</b>, <b>25091A3222</b></div>
+      <div style="margin-top: 1.85rem; padding-top: 1.15rem; border-top: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center; font-size: 0.76rem; color: var(--text-muted);">
+        <div>Reg: <b style="color: var(--accent);">25091A32M7</b>, <b style="color: var(--accent);">25091A3222</b></div>
         <div>PostgreSQL &bull; ArcFace &bull; OSRM</div>
       </div>
     </div>
@@ -738,7 +1475,7 @@ HTML_APP = """<!DOCTYPE html>
     <div id="add-case-modal" class="modal-backdrop" style="display: none;">
       <div class="modal-box">
         <h2>+ Enroll New Missing Person Case</h2>
-        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1.2rem;">
+        <p style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 1.35rem;">
           Register a new individual into the investigation database and active sighting graph.
         </p>
         <form onsubmit="handleCreateCase(event)">
@@ -746,7 +1483,7 @@ HTML_APP = """<!DOCTYPE html>
             <label for="new-name">Full Name *</label>
             <input type="text" id="new-name" placeholder="e.g. Ramesh Kumar" required />
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
             <div class="form-group">
               <label for="new-age">Age *</label>
               <input type="number" id="new-age" value="21" required />
@@ -773,7 +1510,7 @@ HTML_APP = """<!DOCTYPE html>
             <select id="new-team">
             </select>
           </div>
-          <div style="display: flex; gap: 0.75rem; margin-top: 1.25rem;">
+          <div style="display: flex; gap: 0.85rem; margin-top: 1.45rem;">
             <button type="button" class="btn btn-secondary" onclick="closeAddCaseModal()" style="flex: 1;">Cancel</button>
             <button type="submit" class="btn btn-success" style="flex: 2;">Save Case & Begin Tracking</button>
           </div>
@@ -785,7 +1522,7 @@ HTML_APP = """<!DOCTYPE html>
     <div id="add-ngo-modal" class="modal-backdrop" style="display: none;">
       <div class="modal-box">
         <h2>+ Register New NGO / Rescue Team</h2>
-        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1.2rem;">
+        <p style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 1.35rem;">
           Add a partner NGO or search party with their base coordinates and dedicated login credentials.
         </p>
         <form onsubmit="handleCreateNgo(event)">
@@ -793,7 +1530,7 @@ HTML_APP = """<!DOCTYPE html>
             <label for="ngo-name">NGO / Team Name *</label>
             <input type="text" id="ngo-name" placeholder="e.g. Red Cross Kurnool Chapter" required />
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
             <div class="form-group">
               <label for="ngo-org">Organization Type</label>
               <select id="ngo-org">
@@ -824,7 +1561,7 @@ HTML_APP = """<!DOCTYPE html>
             <label for="ngo-base-name">Base Location Label *</label>
             <input type="text" id="ngo-base-name" value="Budhwarpet Base" required />
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
             <div class="form-group">
               <label for="ngo-lat">Latitude *</label>
               <input type="number" step="0.0001" id="ngo-lat" value="15.8350" required />
@@ -834,9 +1571,9 @@ HTML_APP = """<!DOCTYPE html>
               <input type="number" step="0.0001" id="ngo-lon" value="78.0450" required />
             </div>
           </div>
-          <div style="background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem;">
-            <div style="font-size: 0.8rem; font-weight: 700; color: var(--accent); margin-bottom: 0.4rem;">🔑 Separate Login Credentials for this NGO:</div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div style="background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 0.95rem; margin-bottom: 1.15rem;">
+            <div style="font-size: 0.82rem; font-weight: 700; color: var(--accent); margin-bottom: 0.5rem;">🔑 Separate Login Credentials for this NGO:</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
               <div class="form-group" style="margin-bottom: 0;">
                 <label for="ngo-username">Login Username *</label>
                 <input type="text" id="ngo-username" placeholder="e.g. redcross_kurnool" required />
@@ -847,7 +1584,7 @@ HTML_APP = """<!DOCTYPE html>
               </div>
             </div>
           </div>
-          <div style="display: flex; gap: 0.75rem;">
+          <div style="display: flex; gap: 0.85rem;">
             <button type="button" class="btn btn-secondary" onclick="closeAddNgoModal()" style="flex: 1;">Cancel</button>
             <button type="submit" class="btn btn-success" style="flex: 2;">Register Team & Enable Login</button>
           </div>
@@ -859,16 +1596,16 @@ HTML_APP = """<!DOCTYPE html>
     <div id="allot-case-modal" class="modal-backdrop" style="display: none;">
       <div class="modal-box">
         <h2>📢 Allot Case to Search Party / NGO</h2>
-        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1.2rem;">
+        <p style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 1.35rem;">
           Dispatch case assignment and trigger real-time notification with road routing to the selected NGO unit.
         </p>
         <form onsubmit="handleDispatchAllotment(event)">
           <input type="hidden" id="allot-case-id" />
           
-          <div style="background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem;">
-            <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">Case Details:</div>
-            <div style="font-size: 1.05rem; font-weight: 700; color: var(--text); margin-top: 0.2rem;" id="allot-case-title">Case #1: N.K.SYAM</div>
-            <div style="font-size: 0.82rem; color: var(--accent); margin-top: 0.2rem;" id="allot-case-loc">Target: CAR STAND</div>
+          <div style="background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 0.95rem; margin-bottom: 1.15rem;">
+            <div style="font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);">Case Details:</div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: var(--text); margin-top: 0.25rem;" id="allot-case-title">Case #1: N.K.SYAM</div>
+            <div style="font-size: 0.85rem; color: var(--accent); margin-top: 0.25rem; font-weight: 600;" id="allot-case-loc">Target: CAR STAND</div>
           </div>
 
           <div class="form-group">
@@ -887,14 +1624,14 @@ HTML_APP = """<!DOCTYPE html>
             <textarea id="allot-instructions" rows="2" placeholder="e.g. High priority. Immediate ground mobilization required; subject wearing blue shirt."></textarea>
           </div>
 
-          <div style="background: var(--card); border: 1px solid var(--card-border); border-radius: 6px; padding: 0.6rem 0.8rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem;">
+          <div style="background: var(--card); border: 1px solid var(--card-border); border-radius: 8px; padding: 0.75rem 0.95rem; margin-bottom: 1.35rem; display: flex; align-items: center; gap: 0.6rem; font-size: 0.84rem;">
             <input type="checkbox" id="allot-sms-check" checked disabled />
-            <label for="allot-sms-check" style="margin: 0; color: var(--text); cursor: pointer;">
+            <label for="allot-sms-check" style="margin: 0; color: var(--text); cursor: pointer; font-weight: 600;">
               📱 Dispatch instant emergency SMS alert to team's registered phone
             </label>
           </div>
 
-          <div style="display: flex; gap: 0.75rem;">
+          <div style="display: flex; gap: 0.85rem;">
             <button type="button" class="btn btn-secondary" onclick="closeAllotModal()" style="flex: 1;">Cancel</button>
             <button type="submit" class="btn btn-danger" style="flex: 2;">🚀 Send Allotment Alert</button>
           </div>
@@ -904,27 +1641,27 @@ HTML_APP = """<!DOCTYPE html>
 
     <!-- Notifications Center Modal -->
     <div id="notifications-modal" class="modal-backdrop" style="display: none;">
-      <div class="modal-box" style="max-width: 580px;">
+      <div class="modal-box" style="max-width: 600px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-          <h2 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+          <h2 style="margin: 0; display: flex; align-items: center; gap: 0.6rem;">
             🔔 Case Allotment Notifications
           </h2>
           <span class="badge" style="background: #ef4444;" id="notif-modal-count">0 Unread</span>
         </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-          <span style="font-size: 0.8rem; color: var(--text-muted);" id="notif-modal-subtitle">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.15rem;">
+          <span style="font-size: 0.82rem; color: var(--text-muted);" id="notif-modal-subtitle">
             Dispatches sent to your response unit
           </span>
-          <button class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 2px 8px;" onclick="markAllNotificationsRead()">
+          <button class="btn btn-secondary btn-sm" onclick="markAllNotificationsRead()">
             ✓ Mark All Read
           </button>
         </div>
 
-        <div id="notifications-modal-list" style="max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem;">
+        <div id="notifications-modal-list" style="max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.85rem;">
           <!-- Loaded dynamically -->
         </div>
 
-        <div style="margin-top: 1.25rem; text-align: right;">
+        <div style="margin-top: 1.35rem; text-align: right;">
           <button type="button" class="btn btn-secondary btn-sm" onclick="closeNotificationModal()">Close</button>
         </div>
       </div>
@@ -933,24 +1670,32 @@ HTML_APP = """<!DOCTYPE html>
     <!-- Header Navigation -->
     <header>
       <div class="brand">
-        <h1>Missing Person Search-and-Track System <span class="badge">Problem Statement 112</span></h1>
-        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">
-          Graph Network &bull; Live Video Face Scanning &bull; Turn-by-Turn Road Routing
+        <div class="brand-title">
+          <span>Missing Person Search-and-Track</span>
+          <span class="badge">Problem Statement 112</span>
+        </div>
+        <div class="brand-meta">
+          <span class="pulse-dot"></span>
+          <span>SYSTEM ONLINE &bull; Graph Sighting Network &bull; Live ArcFace CCTV &bull; Turn-by-Turn OSRM</span>
         </div>
       </div>
       <div class="nav-actions">
         <span class="reg-id">25091A32M7</span>
         <span class="reg-id">25091A3222</span>
 
+        <div class="clock-badge" id="live-clock">
+          🕒 00:00:00
+        </div>
+
         <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">🌓</button>
 
-        <button class="btn btn-secondary btn-sm" id="btn-header-notifs" onclick="openNotificationModal()" title="Case Allotment Notifications" style="position: relative; font-weight: 600; display: flex; align-items: center; gap: 0.35rem;">
-          🔔 <span id="notif-badge" class="badge notif-badge-pulse" style="background: #ef4444; font-size: 0.7rem; padding: 2px 6px; display: none;">0</span>
+        <button class="btn btn-secondary btn-sm" id="btn-header-notifs" onclick="openNotificationModal()" title="Case Allotment Notifications" style="position: relative; font-weight: 700; display: flex; align-items: center; gap: 0.45rem;">
+          🔔 <span id="notif-badge" class="badge notif-badge-pulse" style="background: #ef4444; font-size: 0.7rem; padding: 2px 7px; display: none;">0</span>
         </button>
 
         <div class="user-pill">
           <span class="dot role-admin" id="role-dot"></span>
-          <span id="current-user-display" style="font-weight: 700;">Admin: Police Command</span>
+          <span id="current-user-display">Admin: Police Command</span>
         </div>
 
         <button class="btn btn-secondary btn-sm" onclick="handleLogout()">🚪 Logout</button>
@@ -961,31 +1706,35 @@ HTML_APP = """<!DOCTYPE html>
 
       <!-- Top Stats Counters -->
       <div class="stats-bar">
-        <div class="stat-box">
-          <div>
+        <div class="stat-box box-total">
+          <div class="stat-info">
             <div class="stat-title">Total Cases</div>
             <div class="stat-number c-total" id="cnt-total">0</div>
+            <div class="stat-sub" style="color: var(--accent);">● Real-Time Database Tracking</div>
           </div>
           <div class="stat-icon">📋</div>
         </div>
-        <div class="stat-box">
-          <div>
-            <div class="stat-title">Active Cases</div>
+        <div class="stat-box box-active">
+          <div class="stat-info">
+            <div class="stat-title">Active Investigations</div>
             <div class="stat-number c-active" id="cnt-active">0</div>
+            <div class="stat-sub" style="color: var(--warning);">● Priority Search Mobilized</div>
           </div>
           <div class="stat-icon">🚨</div>
         </div>
-        <div class="stat-box">
-          <div>
-            <div class="stat-title">Closed / Rescued</div>
+        <div class="stat-box box-closed">
+          <div class="stat-info">
+            <div class="stat-title">Rescued & Closed</div>
             <div class="stat-number c-closed" id="cnt-closed">0</div>
+            <div class="stat-sub" style="color: var(--success);">● Subjects Reunited</div>
           </div>
           <div class="stat-icon">✅</div>
         </div>
-        <div class="stat-box">
-          <div>
-            <div class="stat-title">Registered NGOs</div>
+        <div class="stat-box box-teams">
+          <div class="stat-info">
+            <div class="stat-title">Registered NGO Units</div>
             <div class="stat-number c-dispatch" id="cnt-teams">0</div>
+            <div class="stat-sub" style="color: var(--purple);">● Ready for Immediate Dispatch</div>
           </div>
           <div class="stat-icon">🏢</div>
         </div>
@@ -995,7 +1744,7 @@ HTML_APP = """<!DOCTYPE html>
       <div class="tab-bar" id="portal-tab-bar">
         <button class="tab-btn active" id="tab-admin" onclick="switchView('admin')">👮 Admin Command Center</button>
         <button class="tab-btn" id="tab-ngo" onclick="switchView('ngo')">🚑 NGO / Search Party Portal</button>
-        <div id="ngo-portal-badge" style="display: none; align-items: center; gap: 0.5rem; font-weight: 700; color: #10b981; padding: 0.65rem 0.5rem; font-size: 0.95rem;">
+        <div id="ngo-portal-badge" style="display: none; align-items: center; gap: 0.6rem; font-weight: 800; color: #10b981; padding: 0.75rem 0.6rem; font-size: 1rem;">
           🚑 Dedicated Search Party & Field Rescue Dashboard
         </div>
       </div>
@@ -1013,11 +1762,11 @@ HTML_APP = """<!DOCTYPE html>
             </div>
 
             <!-- Camera Location Selector -->
-            <div style="background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.85rem;">
-              <label for="video-camera-loc" style="font-size: 0.8rem; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.4rem;">
+            <div style="background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 0.85rem; margin-bottom: 1rem;">
+              <label for="video-camera-loc" style="font-size: 0.82rem; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.45rem;">
                 📹 Select Surveillance Camera Location:
               </label>
-              <select id="video-camera-loc" style="width: 100%; background: var(--card); border: 1px solid var(--card-border); color: var(--text); padding: 0.45rem 0.65rem; border-radius: 6px; font-size: 0.85rem;">
+              <select id="video-camera-loc" style="width: 100%; background: var(--card); border: 1px solid var(--card-border); color: var(--text); padding: 0.55rem 0.75rem; border-radius: 8px; font-size: 0.88rem;">
                 <option value="CAR STAND">CAM-01: CAR STAND (15.8281, 78.0373)</option>
                 <option value="Budhwarpet Market">CAM-02: Budhwarpet Market Junction (15.8350, 78.0450)</option>
                 <option value="Kurnool City Railway">CAM-03: Kurnool City Railway Station (15.8310, 78.0420)</option>
@@ -1036,39 +1785,45 @@ HTML_APP = """<!DOCTYPE html>
             </div>
 
             <div class="video-container" id="video-box">
+              <div class="cctv-rec-badge">
+                <span style="color: #ef4444;">●</span> LIVE REC &bull; 1080p
+              </div>
+              <div class="hud-brackets"></div>
               <video id="video-player" controls playsinline>
                 <source src="" type="video/mp4">
               </video>
               <canvas id="canvas-overlay"></canvas>
               <div class="scan-radar" id="radar-sweep"></div>
               <div id="video-placeholder" style="position: absolute; text-align: center; color: var(--text-muted); pointer-events: none;">
-                <div style="font-size: 2.2rem; margin-bottom: 0.3rem;">📹</div>
-                <div>No video loaded</div>
-                <div style="font-size: 0.75rem; color: var(--text-muted);">Upload video or click Load Demo Feed</div>
+                <div style="font-size: 2.6rem; margin-bottom: 0.4rem;">📹</div>
+                <div style="font-weight: 700; font-size: 1rem;">No Video Feed Loaded</div>
+                <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.2rem;">Upload CCTV file or click Load Demo Feed</div>
               </div>
             </div>
 
-            <div style="display: flex; gap: 0.5rem; margin-top: 0.85rem; flex-wrap: wrap;">
+            <div style="display: flex; gap: 0.65rem; margin-top: 1.15rem; flex-wrap: wrap;">
               <input type="file" id="video-file-input" accept="video/*" style="display: none;" onchange="handleVideoUpload(event)">
               <button class="btn btn-secondary btn-sm" onclick="document.getElementById('video-file-input').click()">
-                📁 Upload My Video
+                📁 Upload CCTV Video
               </button>
               <button class="btn btn-secondary btn-sm" onclick="loadSampleVideo()">
                 🎬 Load Demo Video Feed
               </button>
               <button class="btn btn-danger btn-sm" id="btn-run-scan" onclick="startVideoScan()" style="margin-left: auto;">
-                ⚡ Scan Video For Matches
+                ⚡ AI Scan Video For Matches
               </button>
             </div>
 
-            <div id="scan-status" style="font-size: 0.8rem; color: var(--accent); margin-top: 0.6rem; display: none;"></div>
+            <div id="scan-status" style="font-size: 0.84rem; font-weight: 600; color: var(--accent); margin-top: 0.75rem; display: none;"></div>
 
             <div class="match-alert" id="match-box" style="display: none;">
               <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-weight: 700; color: #10b981; font-size: 0.92rem;">🚨 MATCH IDENTIFIED IN CAMERA FEED</span>
+                <span style="font-weight: 800; color: #10b981; font-size: 0.98rem; display: flex; align-items: center; gap: 0.45rem;">
+                  🚨 MATCH CONFIRMED IN SURVEILLANCE FEED
+                </span>
                 <span class="badge" style="background: #10b981;">Confidence 94.6%</span>
               </div>
-              <div style="font-size: 0.84rem; margin-top: 0.4rem; color: var(--text);" id="match-details">
+              <div style="font-size: 0.88rem; margin-top: 0.55rem; color: var(--text); line-height: 1.5;" id="match-details">
               </div>
             </div>
           </div>
@@ -1077,7 +1832,7 @@ HTML_APP = """<!DOCTYPE html>
           <div class="card">
             <div class="card-header">
               <div class="card-title">🗺️ Sighting Graph & Search Zone Perimeter</div>
-              <span style="font-size: 0.8rem; color: var(--text-muted);">Kurnool Network</span>
+              <span class="reg-id">Kurnool Network &bull; Dijkstra</span>
             </div>
             <div id="admin-map"></div>
           </div>
@@ -1087,20 +1842,20 @@ HTML_APP = """<!DOCTYPE html>
         <div class="card" style="margin-bottom: 1.5rem;">
           <div class="card-header">
             <div class="card-title">📁 Registered Missing Persons Database</div>
-            <button class="btn btn-success btn-sm" onclick="openAddCaseModal()">+ Add New Case</button>
+            <button class="btn btn-success btn-sm" onclick="openAddCaseModal()">+ Enroll New Case</button>
           </div>
 
           <!-- Search & Filter Bar -->
           <div class="filter-bar">
             <input type="text" class="search-input" id="case-search-input" placeholder="🔍 Search by name, clothes, location..." oninput="handleSearchCases(event)">
-            <div style="display: flex; gap: 0.4rem;">
+            <div style="display: flex; gap: 0.45rem;">
               <button class="btn btn-secondary btn-sm" onclick="filterCases('ALL')" id="filter-all">All Cases</button>
               <button class="btn btn-secondary btn-sm" onclick="filterCases('ACTIVE')" id="filter-active">Active</button>
               <button class="btn btn-secondary btn-sm" onclick="filterCases('RESOLVED')" id="filter-resolved">Resolved</button>
             </div>
           </div>
 
-          <div style="overflow-x: auto;">
+          <div class="table-container">
             <table>
               <thead>
                 <tr>
@@ -1115,7 +1870,7 @@ HTML_APP = """<!DOCTYPE html>
                 </tr>
               </thead>
               <tbody id="cases-table">
-                <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Loading database cases...</td></tr>
+                <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading database cases...</td></tr>
               </tbody>
             </table>
           </div>
@@ -1127,10 +1882,10 @@ HTML_APP = """<!DOCTYPE html>
             <div class="card-title">🏢 Registered NGOs & Field Search Parties Management</div>
             <button class="btn btn-success btn-sm" onclick="openAddNgoModal()">+ Register New NGO</button>
           </div>
-          <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">
+          <div style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 1.15rem;">
             Manage authorized partner rescue teams, their base station coordinates, and their separate login credentials:
           </div>
-          <div style="overflow-x: auto;">
+          <div class="table-container">
             <table>
               <thead>
                 <tr>
@@ -1145,7 +1900,7 @@ HTML_APP = """<!DOCTYPE html>
                 </tr>
               </thead>
               <tbody id="teams-table">
-                <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Loading registered teams...</td></tr>
+                <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading registered teams...</td></tr>
               </tbody>
             </table>
           </div>
@@ -1156,36 +1911,38 @@ HTML_APP = """<!DOCTYPE html>
       <div id="view-ngo" style="display: none;">
         
         <!-- NGO Case Allotment Alerts & Dispatch Orders -->
-        <div class="card" id="ngo-allotment-alert-card" style="margin-bottom: 1.5rem; border-color: rgba(239, 68, 68, 0.4); background: linear-gradient(180deg, rgba(239, 68, 68, 0.06), var(--card));">
-          <div class="card-header" style="border-bottom: 1px solid rgba(239, 68, 68, 0.2);">
-            <div class="card-title" style="display: flex; align-items: center; gap: 0.5rem; color: #ef4444;">
+        <div class="card" id="ngo-allotment-alert-card" style="margin-bottom: 1.5rem; border-color: rgba(239, 68, 68, 0.4); background: linear-gradient(180deg, rgba(239, 68, 68, 0.08), var(--card));">
+          <div class="card-header" style="border-bottom: 1px solid rgba(239, 68, 68, 0.2); padding-bottom: 0.85rem;">
+            <div class="card-title" style="display: flex; align-items: center; gap: 0.6rem; color: #ef4444;">
               <span>🚨</span>
               <span>Case Allotment Notifications & Dispatch Orders</span>
               <span class="badge" style="background: #ef4444;" id="ngo-notif-count-badge">0 Allotted</span>
             </div>
-            <button class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 2px 8px;" onclick="markAllNotificationsRead()">
+            <button class="btn btn-secondary btn-sm" onclick="markAllNotificationsRead()">
               ✓ Acknowledge All
             </button>
           </div>
-          <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.85rem;">
-            Emergency cases officially allotted to your unit by Police Command with SMS alerts. Click <b>"Accept & Navigate"</b> to automatically calculate and trace the street road route:
+          <div style="font-size: 0.84rem; color: var(--text-muted); margin: 0.85rem 0;">
+            Emergency cases officially allotted to your unit by Police Command with SMS alerts. Click <b>"Accept & Trace Route"</b> to automatically calculate and trace the street road route:
           </div>
-          <div id="ngo-notifs-feed" style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <div id="ngo-notifs-feed" style="display: flex; flex-direction: column; gap: 0.85rem;">
             <!-- Populated dynamically -->
           </div>
         </div>
 
         <!-- Shortest Road Navigation Route Callout -->
         <div class="route-callout">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.75rem;">
             <div>
-              <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.35rem;">
+              <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.45rem;">
                 <span class="badge" style="background: #ef4444;">ACTIVE SEARCH PARTY DISPATCH</span>
                 <span class="badge" style="background: #10b981;" id="route-engine-badge">🚗 Turn-by-Turn Road Route</span>
               </div>
-              <h2 style="font-size: 1.35rem; color: var(--text);">Shortest Street Route from Base to Target Zone</h2>
-              <p style="font-size: 0.85rem; color: var(--text-muted);">
-                Assigned Subject: <b id="ngo-subject-name" style="color: var(--text);">N.K.SYAM</b> &bull; Target Location: <b id="ngo-target-loc" style="color: var(--text);">CAR STAND</b>
+              <h2 style="font-size: 1.45rem; color: var(--text); font-weight: 800; letter-spacing: -0.02em;">
+                Shortest Street Route from Base to Target Zone
+              </h2>
+              <p style="font-size: 0.88rem; color: var(--text-muted); margin-top: 0.25rem;">
+                Assigned Subject: <b id="ngo-subject-name" style="color: var(--accent);">N.K.SYAM</b> &bull; Target Location: <b id="ngo-target-loc" style="color: var(--warning);">CAR STAND</b>
               </p>
             </div>
             <div class="user-pill">
@@ -1205,13 +1962,13 @@ HTML_APP = """<!DOCTYPE html>
             </div>
             <div class="route-item">
               <div class="route-lbl">Team Base Origin</div>
-              <div style="font-size: 0.9rem; color: var(--text); margin-top: 0.2rem;" id="ngo-base-display">
+              <div style="font-size: 0.95rem; font-weight: 700; color: var(--text); margin-top: 0.2rem;" id="ngo-base-display">
                 Budhwarpet Base (15.8350, 78.0450)
               </div>
             </div>
             <div class="route-item">
               <div class="route-lbl">Street Navigation Path</div>
-              <div style="font-size: 0.9rem; color: var(--text); margin-top: 0.2rem;" id="route-path-text">
+              <div style="font-size: 0.88rem; color: var(--text-muted); margin-top: 0.2rem;" id="route-path-text">
                 Navigating through street nodes to target location
               </div>
             </div>
@@ -1223,7 +1980,7 @@ HTML_APP = """<!DOCTYPE html>
           <div class="card">
             <div class="card-header">
               <div class="card-title">📍 Turn-by-Turn Street Navigation Map</div>
-              <span style="font-size: 0.78rem; color: #10b981; font-weight: 700;">Tracing Street Geometry</span>
+              <span class="badge" style="background: #10b981;">Tracing Street Geometry</span>
             </div>
             <div id="ngo-map"></div>
           </div>
@@ -1235,7 +1992,7 @@ HTML_APP = """<!DOCTYPE html>
               <span class="tag tag-active" id="ngo-tag-status">Dispatch #101 Active</span>
             </div>
 
-            <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+            <div style="font-size: 0.86rem; color: var(--text-muted); margin-bottom: 1.15rem;">
               When your search team reaches the search zone, update the field outcome or close the resolved case:
             </div>
 
@@ -1260,20 +2017,20 @@ HTML_APP = """<!DOCTYPE html>
                 <textarea id="resolve-notes" rows="3" placeholder="Enter notes: physical condition, reunited with family, medical support provided..."></textarea>
               </div>
 
-              <button type="submit" class="btn btn-success" style="width: 100%; padding: 0.65rem;">
+              <button type="submit" class="btn btn-success" style="width: 100%; padding: 0.8rem; margin-top: 0.5rem; font-size: 0.95rem;">
                 Submit Field Report & Close Case
               </button>
             </form>
 
-            <div id="resolve-msg" style="margin-top: 1rem; font-size: 0.85rem; display: none;"></div>
+            <div id="resolve-msg" style="margin-top: 1.15rem; font-size: 0.88rem; display: none;"></div>
           </div>
         </div>
       </div>
 
     </div>
 
-    <footer style="background: var(--header-bg); border-top: 1px solid var(--card-border); padding: 1rem; text-align: center; font-size: 0.8rem; color: var(--text-muted); margin-top: auto;">
-      Missing Person Search-and-Track System &bull; Problem Statement 112 &bull; Registered Numbers: 25091A32M7, 25091A3222
+    <footer style="background: var(--header-bg); border-top: 1px solid var(--card-border); padding: 1.25rem; text-align: center; font-size: 0.84rem; color: var(--text-muted); margin-top: auto;">
+      Missing Person Search-and-Track System &bull; Problem Statement 112 &bull; Registered Numbers: <b style="color: var(--accent);">25091A32M7</b>, <b style="color: var(--accent);">25091A3222</b>
     </footer>
 
   </div>
@@ -1292,6 +2049,20 @@ HTML_APP = """<!DOCTYPE html>
     let ngoMap = null;
     let adminLayers = null;
     let ngoLayers = null;
+    let adminTileLayer = null;
+    let ngoTileLayer = null;
+
+    // LIVE DIGITAL CLOCK
+    function updateClock() {
+      const el = document.getElementById('live-clock');
+      if (el) {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
+        el.innerText = `🕒 ${timeStr} IST`;
+      }
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
 
     // ROLE & PERMISSION MANAGEMENT
     function applyRolePermissions(role) {
@@ -1305,7 +2076,6 @@ HTML_APP = """<!DOCTYPE html>
       const disp = document.getElementById('current-user-display');
 
       if (role === 'ngo') {
-        // Strictly prevent NGO from seeing or clicking Admin tab
         if (tabAdmin) tabAdmin.style.display = 'none';
         if (tabNgo) tabNgo.style.display = 'none';
         if (ngoBadge) ngoBadge.style.display = 'flex';
@@ -1320,7 +2090,6 @@ HTML_APP = """<!DOCTYPE html>
         loadNgoRoute();
         setTimeout(() => ngoMap && ngoMap.invalidateSize(), 200);
       } else {
-        // Police Command Admin View
         if (tabAdmin) {
           tabAdmin.style.display = 'inline-block';
           tabAdmin.classList.add('active');
@@ -1342,7 +2111,13 @@ HTML_APP = """<!DOCTYPE html>
       }
     }
 
-    // THEME HANDLING (DARK / LIGHT)
+    // THEME HANDLING (DARK / LIGHT) & DYNAMIC MAP TILES
+    function getTileUrl(theme) {
+      return theme === 'dark' 
+        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+        : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+    }
+
     function initTheme() {
       const saved = localStorage.getItem('mptracker_theme') || 'dark';
       document.documentElement.setAttribute('data-theme', saved);
@@ -1354,6 +2129,11 @@ HTML_APP = """<!DOCTYPE html>
       document.documentElement.setAttribute('data-theme', next);
       localStorage.setItem('mptracker_theme', next);
       showToast(`Switched to ${next.toUpperCase()} mode`);
+
+      // Update map tiles dynamically
+      const tileUrl = getTileUrl(next);
+      if (adminTileLayer) adminTileLayer.setUrl(tileUrl);
+      if (ngoTileLayer) ngoTileLayer.setUrl(tileUrl);
     }
 
     // TOAST NOTIFICATION
@@ -1433,11 +2213,9 @@ HTML_APP = """<!DOCTYPE html>
         loggedInRole = data.role;
         loggedInTeam = data.team || null;
 
-        // Persist session to survive page reloads
         sessionStorage.setItem('mptracker_role', loggedInRole);
         sessionStorage.setItem('mptracker_team', JSON.stringify(loggedInTeam));
 
-        // Transition from Login Screen to Dashboard
         document.getElementById('screen-login').style.display = 'none';
         document.getElementById('screen-app').style.display = 'flex';
         
@@ -1483,17 +2261,19 @@ HTML_APP = """<!DOCTYPE html>
       }
     }
 
-
-    // MAP INITIALIZATION
+    // MAP INITIALIZATION WITH DYNAMIC THEME TILES
     function initMaps() {
+      const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+      const tileUrl = getTileUrl(theme);
+
       if (!adminMap) {
         adminMap = L.map('admin-map').setView([15.828, 78.045], 14);
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(adminMap);
+        adminTileLayer = L.tileLayer(tileUrl, { maxZoom: 19, attribution: '&copy; CARTO &copy; OpenStreetMap' }).addTo(adminMap);
         adminLayers = L.layerGroup().addTo(adminMap);
       }
       if (!ngoMap) {
         ngoMap = L.map('ngo-map').setView([15.832, 78.044], 14);
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(ngoMap);
+        ngoTileLayer = L.tileLayer(tileUrl, { maxZoom: 19, attribution: '&copy; CARTO &copy; OpenStreetMap' }).addTo(ngoMap);
         ngoLayers = L.layerGroup().addTo(ngoMap);
       }
     }
@@ -1530,13 +2310,13 @@ HTML_APP = """<!DOCTYPE html>
       allTeams.forEach(t => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>#${t.id}</td>
-          <td style="font-weight: 700; color: var(--text);">${t.name}</td>
+          <td class="mono" style="color: var(--accent);">#${t.id}</td>
+          <td style="font-weight: 800; color: var(--text);">${t.name}</td>
           <td><span class="badge" style="background: #0284c7;">${t.org}</span></td>
           <td><b>${t.base_location}</b></td>
-          <td style="color: var(--text-muted); font-family: monospace;">${t.lat.toFixed(4)}, ${t.lon.toFixed(4)}</td>
-          <td>${t.phone}</td>
-          <td style="color: var(--accent); font-family: monospace;">${t.username}</td>
+          <td class="mono" style="color: var(--text-muted);">${t.lat.toFixed(4)}, ${t.lon.toFixed(4)}</td>
+          <td class="mono">${t.phone}</td>
+          <td class="mono" style="color: var(--accent); font-weight: 700;">${t.username}</td>
           <td style="text-align: right;">
             <button class="btn btn-danger btn-sm" onclick="deleteTeam(${t.id})" title="Remove Team">Remove</button>
           </td>
@@ -1585,42 +2365,43 @@ HTML_APP = """<!DOCTYPE html>
       });
 
       if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:1.5rem;">No matching cases found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:2rem;">No matching cases found.</td></tr>`;
         return;
       }
 
       filtered.forEach(c => {
         const tr = document.createElement('tr');
         const statusClass = c.status === 'ACTIVE' ? 'tag-active' : (c.status === 'RESCUED' ? 'tag-rescued' : 'tag-closed');
+        const statusPulse = c.status === 'ACTIVE' ? '<span class="pulse-dot" style="background:var(--warning); box-shadow:0 0 8px var(--warning); margin-right:4px;"></span>' : '';
         
         let actionButtons = '';
         if (loggedInRole === 'admin') {
           actionButtons += `<button class="btn btn-secondary btn-sm" onclick="openAllotModal(${c.id})" title="Allot case to specific NGO and send SMS alert">📢 Allot NGO</button> `;
           if (c.status === 'ACTIVE') {
-            actionButtons += `<button class="btn btn-success btn-sm" onclick="markCaseResolved(${c.id})">Resolve</button> `;
+            actionButtons += `<button class="btn btn-success btn-sm" onclick="markCaseResolved(${c.id})">✓ Resolve</button> `;
           }
-          actionButtons += `<button class="btn btn-danger btn-sm" onclick="deleteCase(${c.id})" title="Remove Case">Remove</button>`;
+          actionButtons += `<button class="btn btn-danger btn-sm" onclick="deleteCase(${c.id})" title="Remove Case">🗑 Remove</button>`;
         } else {
           const isMyCase = loggedInTeam && c.assigned_team === loggedInTeam.name;
           if (isMyCase) {
             actionButtons += `<button class="btn btn-success btn-sm" onclick="acceptCaseAndNavigate(${c.id})">🚗 Trace Route</button>`;
           } else {
-            actionButtons += `<span style="font-size: 0.75rem; color: var(--text-muted);">${c.assigned_team || 'Assigned'}</span>`;
+            actionButtons += `<span style="font-size: 0.78rem; color: var(--text-muted);">${c.assigned_team || 'Assigned'}</span>`;
           }
         }
 
         const assignColumn = loggedInRole === 'admin'
-          ? `<span style="font-weight: 600; color: var(--accent);">${c.assigned_team}</span>
-             <button class="btn btn-secondary btn-sm" style="font-size: 0.7rem; padding: 1px 6px; margin-left: 6px; border-radius: 4px;" onclick="openAllotModal(${c.id})" title="Reassign to another NGO">Change</button>`
-          : `<span style="font-weight: 600; color: var(--accent);">${c.assigned_team}</span>`;
+          ? `<span style="font-weight: 700; color: var(--accent);">${c.assigned_team}</span>
+             <button class="btn btn-secondary btn-sm" style="font-size: 0.7rem; padding: 2px 7px; margin-left: 6px; border-radius: 4px;" onclick="openAllotModal(${c.id})" title="Reassign to another NGO">Change</button>`
+          : `<span style="font-weight: 700; color: var(--accent);">${c.assigned_team}</span>`;
 
         tr.innerHTML = `
-          <td>#${c.id}</td>
-          <td style="font-weight: 700; color: var(--text);">${c.name}</td>
+          <td class="mono" style="color: var(--accent);">#${c.id}</td>
+          <td style="font-weight: 800; color: var(--text);">${c.name}</td>
           <td>${c.age} / ${c.gender}</td>
           <td style="color: var(--text-muted);">${c.clothes || 'Standard'}</td>
           <td><b>${c.last_seen_location}</b></td>
-          <td><span class="tag ${statusClass}">${c.status}</span></td>
+          <td><span class="tag ${statusClass}">${statusPulse}${c.status}</span></td>
           <td>${assignColumn}</td>
           <td style="text-align: right; white-space: nowrap;">${actionButtons}</td>
         `;
@@ -1635,6 +2416,9 @@ HTML_APP = """<!DOCTYPE html>
 
     function filterCases(filter) {
       currentFilter = filter;
+      document.getElementById('filter-all').className = `btn btn-sm ${filter === 'ALL' ? 'btn' : 'btn-secondary'}`;
+      document.getElementById('filter-active').className = `btn btn-sm ${filter === 'ACTIVE' ? 'btn' : 'btn-secondary'}`;
+      document.getElementById('filter-resolved').className = `btn btn-sm ${filter === 'RESOLVED' ? 'btn' : 'btn-secondary'}`;
       renderCasesTable();
     }
 
@@ -1673,18 +2457,18 @@ HTML_APP = """<!DOCTYPE html>
         data.all_locations.forEach(loc => {
           L.circleMarker([loc.lat, loc.lon], {
             radius: 6, color: '#38bdf8', fillColor: '#08101e', fillOpacity: 0.9, weight: 2
-          }).bindPopup(`<b>${loc.name}</b><br>Surveillance Node`).addTo(adminLayers);
+          }).bindPopup(`<b>${loc.name}</b><br><span style="color:#38bdf8;">Surveillance Node</span>`).addTo(adminLayers);
         });
 
         const colors = ['#ef4444', '#f59e0b', '#3b82f6', '#10b981', '#a855f7'];
         data.zones.forEach((z, i) => {
           const color = colors[i] || '#64748b';
           L.circle([z.lat, z.lon], {
-            radius: z.radius_km * 1000, color: color, fillColor: color, fillOpacity: 0.15, weight: 2
-          }).bindPopup(`<b>#${z.rank} ${z.location}</b><br>Score: ${(z.score * 100).toFixed(1)}%<br>${z.reason}`).addTo(adminLayers);
+            radius: z.radius_km * 1000, color: color, fillColor: color, fillOpacity: 0.16, weight: 2
+          }).bindPopup(`<b>#${z.rank} ${z.location}</b><br>Reach Probability: <b style="color:${color};">${(z.score * 100).toFixed(1)}%</b><br>${z.reason}`).addTo(adminLayers);
 
           L.circleMarker([z.lat, z.lon], {
-            radius: 7, color: color, fillColor: color, fillOpacity: 0.9, weight: 2
+            radius: 8, color: color, fillColor: color, fillOpacity: 0.95, weight: 2
           }).addTo(adminLayers);
         });
       } catch (e) { console.error(e); }
@@ -1727,31 +2511,29 @@ HTML_APP = """<!DOCTYPE html>
           badge.innerText = `🚗 ${data.engine || 'Real Road Network'}`;
         }
         const coordsCount = data.street_coordinates ? data.street_coordinates.length : (data.route_coordinates ? data.route_coordinates.length : 2);
-        document.getElementById('route-path-text').innerText = `Street route navigating through ${coordsCount} road nodes from ${baseName} to ${locName}`;
+        document.getElementById('route-path-text').innerText = `Street route tracing through ${coordsCount} road nodes from ${baseName} to ${locName}`;
 
         // Search party base marker
         L.circleMarker([startLat, startLon], {
-          radius: 9, color: '#10b981', fillColor: '#10b981', fillOpacity: 0.95, weight: 3
+          radius: 10, color: '#10b981', fillColor: '#10b981', fillOpacity: 0.95, weight: 3
         }).bindPopup(`<b>${teamName} (Base)</b><br>${baseName}`).addTo(ngoLayers);
 
         // Target sighting location marker
         L.circleMarker([targetLat, targetLon], {
-          radius: 9, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.95, weight: 3
+          radius: 10, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.95, weight: 3
         }).bindPopup(`<b>Target Sighting: ${personName}</b><br>${locName}`).addTo(ngoLayers);
 
         L.circle([targetLat, targetLon], {
           radius: 400, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.18, weight: 2
         }).addTo(ngoLayers);
 
-        // Real street coordinates provided directly by server (pre-fetched from OSRM)
         const streetCoordinates = data.street_coordinates || data.route_coordinates || [[startLat, startLon], [targetLat, targetLon]];
 
-        // Draw dual-layer professional GPS road navigation polyline:
-        // Casing/border line (darker, thick) + core glow road line
+        // Draw dual-layer professional GPS road navigation polyline
         const casingPoly = L.polyline(streetCoordinates, {
           color: '#0369a1',
           weight: 9,
-          opacity: 0.75,
+          opacity: 0.8,
           lineCap: 'round',
           lineJoin: 'round'
         }).addTo(ngoLayers);
@@ -1809,7 +2591,6 @@ HTML_APP = """<!DOCTYPE html>
         const data = await res.json();
         allNotifications = data.notifications || [];
 
-        // Update Header Badge
         const badge = document.getElementById('notif-badge');
         if (badge) {
           if (data.unread_count > 0) {
@@ -1820,11 +2601,9 @@ HTML_APP = """<!DOCTYPE html>
           }
         }
 
-        // Update Modal Count
         const modalCount = document.getElementById('notif-modal-count');
         if (modalCount) modalCount.innerText = `${data.unread_count} Unread`;
 
-        // Update NGO view badge
         const ngoBadge = document.getElementById('ngo-notif-count-badge');
         if (ngoBadge) ngoBadge.innerText = `${allNotifications.length} Allotted (${data.unread_count} New)`;
 
@@ -1841,7 +2620,7 @@ HTML_APP = """<!DOCTYPE html>
       list.innerHTML = '';
 
       if (allNotifications.length === 0) {
-        list.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No case allotment notifications found.</div>`;
+        list.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 2rem;">No case allotment notifications found.</div>`;
         return;
       }
 
@@ -1850,19 +2629,19 @@ HTML_APP = """<!DOCTYPE html>
         div.className = `notif-card ${!n.read ? 'unread' : ''}`;
         div.innerHTML = `
           <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
-            <div style="font-weight: 700; color: var(--text); font-size: 0.92rem;">
+            <div style="font-weight: 800; color: var(--text); font-size: 0.95rem;">
               ${!n.read ? '<span style="color: #ef4444; margin-right: 4px;">●</span>' : ''}${n.title}
             </div>
-            <span style="font-size: 0.75rem; color: var(--text-muted); white-space: nowrap;">${n.timestamp}</span>
+            <span class="mono" style="font-size: 0.74rem; color: var(--text-muted); white-space: nowrap;">${n.timestamp}</span>
           </div>
-          <div style="font-size: 0.83rem; color: var(--text-muted); line-height: 1.35;">
+          <div style="font-size: 0.84rem; color: var(--text-muted); line-height: 1.4;">
             ${n.message}
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.35rem; flex-wrap: wrap; gap: 0.4rem;">
-            <span style="font-size: 0.75rem; color: #10b981;">📱 ${n.sms_status}</span>
-            <div style="display: flex; gap: 0.4rem;">
-              ${n.case_id ? `<button class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 2px 7px;" onclick="acceptCaseAndNavigate(${n.case_id})">🚗 Trace Route</button>` : ''}
-              ${!n.read ? `<button class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 2px 7px;" onclick="markNotificationRead(${n.id})">✓ Acknowledge</button>` : ''}
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.45rem; flex-wrap: wrap; gap: 0.5rem;">
+            <span style="font-size: 0.78rem; font-weight: 700; color: #10b981;">📱 ${n.sms_status}</span>
+            <div style="display: flex; gap: 0.45rem;">
+              ${n.case_id ? `<button class="btn btn-secondary btn-sm" style="font-size: 0.74rem; padding: 3px 8px;" onclick="acceptCaseAndNavigate(${n.case_id})">🚗 Trace Route</button>` : ''}
+              ${!n.read ? `<button class="btn btn-secondary btn-sm" style="font-size: 0.74rem; padding: 3px 8px;" onclick="markNotificationRead(${n.id})">✓ Acknowledge</button>` : ''}
             </div>
           </div>
         `;
@@ -1877,7 +2656,7 @@ HTML_APP = """<!DOCTYPE html>
 
       if (allNotifications.length === 0) {
         feed.innerHTML = `
-          <div style="background: var(--input-bg); border: 1px dashed var(--card-border); border-radius: 8px; padding: 1rem; text-align: center; color: var(--text-muted); font-size: 0.85rem;">
+          <div style="background: var(--input-bg); border: 1px dashed var(--card-border); border-radius: 12px; padding: 1.25rem; text-align: center; color: var(--text-muted); font-size: 0.88rem;">
             ✅ No pending case allotments for this unit. All dispatches acknowledged.
           </div>
         `;
@@ -1890,26 +2669,26 @@ HTML_APP = """<!DOCTYPE html>
         div.innerHTML = `
           <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; flex-wrap: wrap;">
             <div>
-              <div style="display: flex; align-items: center; gap: 0.4rem;">
+              <div style="display: flex; align-items: center; gap: 0.45rem;">
                 <span class="badge" style="background: #ef4444;">CASE ALLOTMENT ORDER</span>
                 ${!n.read ? '<span class="badge" style="background: #f59e0b;">NEW UNREAD</span>' : '<span class="badge" style="background: #10b981;">ACKNOWLEDGED</span>'}
               </div>
-              <h3 style="font-size: 1.05rem; margin-top: 0.3rem; color: var(--text);">${n.title}</h3>
+              <h3 style="font-size: 1.1rem; margin-top: 0.35rem; color: var(--text); font-weight: 800;">${n.title}</h3>
             </div>
-            <span style="font-size: 0.75rem; color: var(--text-muted);">${n.timestamp}</span>
+            <span class="mono" style="font-size: 0.74rem; color: var(--text-muted);">${n.timestamp}</span>
           </div>
 
-          <div style="background: var(--card); border: 1px solid var(--card-border); border-radius: 6px; padding: 0.6rem 0.8rem; margin: 0.3rem 0; font-size: 0.84rem;">
-            <div>Missing Person: <b>${n.person_name}</b> (Case #${n.case_id})</div>
+          <div style="background: var(--card); border: 1px solid var(--card-border); border-radius: 10px; padding: 0.75rem 0.95rem; margin: 0.4rem 0; font-size: 0.86rem; line-height: 1.45;">
+            <div>Missing Person: <b style="color: var(--text);">${n.person_name}</b> (Case #${n.case_id})</div>
             <div>Target Sighting Zone: <b style="color: var(--accent);">${n.last_seen_location}</b></div>
-            <div style="color: var(--text-muted); margin-top: 0.2rem; font-size: 0.8rem;">${n.message}</div>
+            <div style="color: var(--text-muted); margin-top: 0.25rem; font-size: 0.82rem;">${n.message}</div>
           </div>
 
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
-            <div style="font-size: 0.78rem; color: #10b981; display: flex; align-items: center; gap: 0.3rem;">
+            <div style="font-size: 0.8rem; color: #10b981; font-weight: 700; display: flex; align-items: center; gap: 0.35rem;">
               <span>📱</span> <span>SMS Dispatch Alert: <b>${n.sms_status}</b></span>
             </div>
-            <div style="display: flex; gap: 0.5rem;">
+            <div style="display: flex; gap: 0.55rem;">
               <button class="btn btn-success btn-sm" onclick="acceptCaseAndNavigate(${n.case_id})">
                 🚗 Accept & Trace Road Route
               </button>
@@ -2048,7 +2827,6 @@ HTML_APP = """<!DOCTYPE html>
       document.getElementById('add-ngo-modal').style.display = 'flex';
     }
     function closeAddNgoModal() { document.getElementById('add-ngo-modal').style.display = 'none'; }
-
 
     function handleNgoBasePresetChange() {
       const val = document.getElementById('ngo-base-preset').value;
@@ -2239,10 +3017,10 @@ HTML_APP = """<!DOCTYPE html>
         const targetTeamName = loggedInTeam ? loggedInTeam.name : (allTeams.length > 0 ? allTeams[0].name : "Helping Hands NGO");
 
         document.getElementById('match-details').innerHTML = `
-          Person: <b>${matchPerson}</b> (Case #${matchCaseId})<br>
-          Camera Location: <b>${selectedCamText}</b><br>
-          Detection Timestamp: <b>00:04.2s (Frame 105)</b> &bull; Cosine Dist: <b>0.28</b><br>
-          Auto-Dispatch: Nearest team <b>${targetTeamName}</b> mobilized to <b>${selectedCamKey}</b> via road navigation.
+          <div>Person: <b style="color:var(--text);">${matchPerson}</b> (Case #${matchCaseId})</div>
+          <div>Camera Location: <b>${selectedCamText}</b></div>
+          <div>Detection Timestamp: <b>00:04.2s (Frame 105)</b> &bull; Cosine Dist: <b style="color:var(--success);">0.28</b></div>
+          <div style="margin-top:0.35rem; color:var(--accent);">Auto-Dispatch: Nearest team <b>${targetTeamName}</b> mobilized to <b>${selectedCamKey}</b> via road navigation.</div>
         `;
 
         await fetch('/api/scan', {
@@ -2251,18 +3029,37 @@ HTML_APP = """<!DOCTYPE html>
           body: JSON.stringify({ camera_location: selectedCamKey, case_id: matchCaseId, person_name: matchPerson })
         });
 
-        // Draw bounding box on overlay canvas
+        // Draw tactical bounding box on overlay canvas
         const canvas = document.getElementById('canvas-overlay');
         canvas.width = canvas.offsetWidth;
         canvas.height = canvas.offsetHeight;
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
         ctx.strokeStyle = '#ef4444';
         ctx.lineWidth = 3;
-        ctx.strokeRect(canvas.width * 0.38, canvas.height * 0.25, canvas.width * 0.22, canvas.height * 0.35);
+        const boxX = canvas.width * 0.38;
+        const boxY = canvas.height * 0.25;
+        const boxW = canvas.width * 0.22;
+        const boxH = canvas.height * 0.35;
+        ctx.strokeRect(boxX, boxY, boxW, boxH);
+        
+        // Target corner reticles
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        // Top-left
+        ctx.moveTo(boxX, boxY + 15); ctx.lineTo(boxX, boxY); ctx.lineTo(boxX + 15, boxY);
+        // Top-right
+        ctx.moveTo(boxX + boxW - 15, boxY); ctx.lineTo(boxX + boxW, boxY); ctx.lineTo(boxX + boxW, boxY + 15);
+        // Bottom-left
+        ctx.moveTo(boxX, boxY + boxH - 15); ctx.lineTo(boxX, boxY + boxH); ctx.lineTo(boxX + 15, boxY + boxH);
+        // Bottom-right
+        ctx.moveTo(boxX + boxW - 15, boxY + boxH); ctx.lineTo(boxX + boxW, boxY + boxH); ctx.lineTo(boxX + boxW, boxY + boxH - 15);
+        ctx.stroke();
+
         ctx.fillStyle = '#ef4444';
         ctx.font = 'bold 13px sans-serif';
-        ctx.fillText(`${matchPerson} @ ${selectedCamKey}`, canvas.width * 0.38, canvas.height * 0.25 - 6);
+        ctx.fillText(`TARGET: ${matchPerson} @ ${selectedCamKey}`, boxX, boxY - 8);
 
         showToast(`Match detected: ${matchPerson}`);
         loadStats();
