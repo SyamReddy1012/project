@@ -237,6 +237,7 @@ INITIAL_NOTIFICATIONS = [
 ]
 
 APP_STATE = {
+    "cameras": dict(CAMERA_LOCATIONS),
     "cases": list(INITIAL_CASES),
     "teams": list(INITIAL_TEAMS),
     "notifications": list(INITIAL_NOTIFICATIONS),
@@ -1807,6 +1808,52 @@ HTML_APP = """<!DOCTYPE html>
   <div id="screen-app" style="display: none; flex-direction: column; min-height: 100vh;">
 
     <!-- Add Case Modal -->
+        <!-- Add Camera Location Modal (Admin Only) -->
+    <div id="add-camera-modal" class="modal-backdrop" style="display: none;">
+      <div class="modal-box">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <h2 style="margin: 0; display: flex; align-items: center; gap: 0.45rem;">
+            <span>📹</span> <span>Install New Surveillance Camera Node</span>
+          </h2>
+          <span class="badge" style="background: #10b981;">Police Command Only</span>
+        </div>
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+          Add a newly installed CCTV or surveillance camera location to the Police Command network and Sighting Graph.
+        </p>
+        <form onsubmit="handleCreateCamera(event)">
+          <div class="form-group">
+            <label for="new-cam-name">Camera Location / Landmark Name *</label>
+            <input type="text" id="new-cam-name" placeholder="e.g. Kurnool Medical College Gate" required />
+          </div>
+          <div class="form-group">
+            <label for="new-cam-code">Camera Identifier Code / Label</label>
+            <input type="text" id="new-cam-code" placeholder="e.g. CAM-15: Medical College (15.8250, 78.0350)" />
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+            <div class="form-group">
+              <label for="new-cam-lat">Latitude *</label>
+              <input type="number" step="0.0001" id="new-cam-lat" value="15.8250" required />
+            </div>
+            <div class="form-group">
+              <label for="new-cam-lon">Longitude *</label>
+              <input type="number" step="0.0001" id="new-cam-lon" value="78.0350" required />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="new-cam-desc">Camera Stream / Hardware Description</label>
+            <input type="text" id="new-cam-desc" value="1080p PTZ Outdoor Night-Vision Camera" placeholder="e.g. 1080p PTZ Outdoor Night-Vision Camera" />
+          </div>
+          <div style="background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 0.65rem 0.85rem; margin-bottom: 1.15rem; font-size: 0.78rem; color: var(--text-muted);">
+            <span>🔒 Security Note: This camera node will be immediately integrated into the DeepFace ArcFace facial recognition scanning feed and Sighting Graph perimeters.</span>
+          </div>
+          <div style="display: flex; gap: 0.75rem;">
+            <button type="button" class="btn btn-secondary" onclick="closeAddCameraModal()" style="flex: 1;">Cancel</button>
+            <button type="submit" class="btn btn-success" style="flex: 2;">+ Add Camera to Network</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div id="add-case-modal" class="modal-backdrop" style="display: none;">
       <div class="modal-box">
         <h2>+ Enroll New Missing Person Case</h2>
@@ -2098,9 +2145,14 @@ HTML_APP = """<!DOCTYPE html>
 
             <!-- Camera Location Selector -->
             <div style="background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 0.85rem; margin-bottom: 1rem;">
-              <label for="video-camera-loc" style="font-size: 0.82rem; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.45rem;">
-                📹 Select Surveillance Camera Location:
-              </label>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem;">
+                <label for="video-camera-loc" style="font-size: 0.82rem; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 0.45rem; margin: 0;">
+                  📹 Select Surveillance Camera Location:
+                </label>
+                <button class="btn btn-secondary btn-sm" id="btn-add-camera" onclick="openAddCameraModal()" style="font-size: 0.74rem; padding: 2px 8px; font-weight: 700; border-color: var(--accent); color: var(--accent);" title="Install and register new surveillance camera node (Admin Only)">
+                  + Add Camera Location
+                </button>
+              </div>
               <select id="video-camera-loc" style="width: 100%; background: var(--card); border: 1px solid var(--card-border); color: var(--text); padding: 0.55rem 0.75rem; border-radius: 8px; font-size: 0.88rem;">
                 <option value="CAR STAND">CAM-01: CAR STAND (15.8281, 78.0373)</option>
                 <option value="Budhwarpet Market">CAM-02: Budhwarpet Market Junction (15.8350, 78.0450)</option>
@@ -2649,6 +2701,14 @@ HTML_APP = """<!DOCTYPE html>
         const teamName = loggedInTeam ? loggedInTeam.name : 'Search Party Unit';
         if (disp) disp.innerText = `Search Party: ${teamName}`;
 
+        // Strictly hide camera addition controls from NGO view
+        const btnAddCam = document.getElementById('btn-add-camera');
+        if (btnAddCam) btnAddCam.style.display = 'none';
+        const btnMapAddCam = document.getElementById('btn-map-add-cam');
+        if (btnMapAddCam) btnMapAddCam.style.display = 'none';
+        const modalCam = document.getElementById('add-camera-modal');
+        if (modalCam) modalCam.style.display = 'none';
+
         currentRole = 'ngo';
         loadNgoRoute();
         setTimeout(() => ngoMap && ngoMap.invalidateSize(), 200);
@@ -2667,6 +2727,12 @@ HTML_APP = """<!DOCTYPE html>
 
         if (dot) dot.className = 'dot role-admin';
         if (disp) disp.innerText = 'Admin: Police Command';
+
+        // Enable camera addition controls exclusively for Admin role
+        const btnAddCam = document.getElementById('btn-add-camera');
+        if (btnAddCam) btnAddCam.style.display = 'inline-block';
+        const btnMapAddCam = document.getElementById('btn-map-add-cam');
+        if (btnMapAddCam) btnMapAddCam.style.display = 'inline-block';
 
         currentRole = 'admin';
         loadNotifications();
@@ -2823,6 +2889,101 @@ HTML_APP = """<!DOCTYPE html>
         document.getElementById('screen-login').style.display = 'none';
         document.getElementById('screen-app').style.display = 'flex';
         applyRolePermissions(loggedInRole);
+      }
+    }
+
+
+    // CAMERA REGISTRY & DYNAMIC NODE MANAGEMENT
+    let allCameras = [];
+
+    async function loadCameras(selectCameraName = null) {
+      try {
+        const res = await fetch('/api/cameras');
+        allCameras = await res.json();
+        const sel = document.getElementById('video-camera-loc');
+        if (!sel) return;
+
+        const currentVal = selectCameraName || sel.value;
+        sel.innerHTML = '';
+        allCameras.forEach(cam => {
+          const opt = document.createElement('option');
+          opt.value = cam.name;
+          opt.innerText = cam.label || `${cam.name} (${cam.lat.toFixed(4)}, ${cam.lon.toFixed(4)})`;
+          if (cam.name === currentVal) opt.selected = true;
+          sel.appendChild(opt);
+        });
+
+        if (selectCameraName) sel.value = selectCameraName;
+      } catch (err) {
+        console.error('Error loading cameras:', err);
+      }
+    }
+
+    function openAddCameraModal() {
+      if (loggedInRole !== 'admin') {
+        showToast('⚠️ Access Denied: Only Police Command can install new camera nodes.');
+        return;
+      }
+      const modal = document.getElementById('add-camera-modal');
+      if (!modal) return;
+
+      const nextNum = (allCameras ? allCameras.length : 14) + 1;
+      const codeInput = document.getElementById('new-cam-code');
+      if (codeInput) {
+        codeInput.value = `CAM-${nextNum < 10 ? '0' + nextNum : nextNum}: `;
+      }
+
+      modal.style.display = 'flex';
+    }
+
+    function closeAddCameraModal() {
+      const modal = document.getElementById('add-camera-modal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    async function handleCreateCamera(e) {
+      e.preventDefault();
+      if (loggedInRole !== 'admin') {
+        showToast('⚠️ Access Denied: Only Police Command can add cameras.');
+        return;
+      }
+
+      const name = document.getElementById('new-cam-name').value.trim();
+      const code = document.getElementById('new-cam-code').value.trim();
+      const lat = parseFloat(document.getElementById('new-cam-lat').value);
+      const lon = parseFloat(document.getElementById('new-cam-lon').value);
+      const desc = document.getElementById('new-cam-desc').value.trim();
+
+      try {
+        const res = await fetch('/api/cameras/add', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-Role': loggedInRole || 'admin'
+          },
+          body: JSON.stringify({ name: name, code: code, lat: lat, lon: lon, description: desc })
+        });
+        const data = await res.json();
+        if (data.status !== 'success') {
+          showToast(`⚠️ ${data.error || 'Failed to add camera'}`);
+          return;
+        }
+
+        closeAddCameraModal();
+        e.target.reset();
+        showToast(`📹 Camera registered: ${name}`);
+
+        // Reload cameras and select the new camera in scanner
+        await loadCameras(name);
+        await loadMapData();
+
+        // Focus map on the new camera
+        if (adminMap) {
+          adminMap.flyTo([lat, lon], 16, { duration: 1.2 });
+        }
+      } catch (err) {
+        console.error('Error adding camera:', err);
+        showToast('⚠️ Network error adding camera node.');
       }
     }
 
@@ -3802,7 +3963,8 @@ Missing Person Search-and-Track System (Problem Statement 112)`;
         closeAddNgoModal();
         e.target.reset();
         showToast(`NGO Registered: ${saved.name}`);
-        loadTeams();
+        loadCameras();
+      loadTeams();
         loadStats();
       } catch (err) { console.error(err); }
     }
@@ -4181,6 +4343,21 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             self._send_json({"status": "healthy"})
             return
 
+        if path == "/api/cameras":
+            cams = []
+            cams_dict = APP_STATE.get("cameras", CAMERA_LOCATIONS)
+            for idx, (k, v) in enumerate(cams_dict.items(), 1):
+                cams.append({
+                    "id": idx,
+                    "name": k,
+                    "label": v.get("label", f"CAM-{idx:02d}: {k} ({v['lat']:.4f}, {v['lon']:.4f})"),
+                    "lat": v["lat"],
+                    "lon": v["lon"],
+                    "description": v.get("description", "Surveillance CCTV Camera Node"),
+                })
+            self._send_json(cams)
+            return
+
         if path == "/api/stats":
             self._send_json(_get_app_stats())
             return
@@ -4299,8 +4476,74 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             "/api/cases/delete",
             "/api/cases/allot",
             "/api/scan",
+            "/api/cameras/add",
+            "/api/cameras/delete",
         ):
             self._send_json({"status": "error", "error": "Access Denied: Police Command admin privileges required."}, status=403)
+            return
+
+        if parsed.path == "/api/cameras/add":
+            if role_header == "ngo":
+                self._send_json({"status": "error", "error": "Access Denied: Only Police Command can install new camera locations."}, status=403)
+                return
+
+            cam_name = body.get("name", "").strip()
+            if not cam_name:
+                self._send_json({"status": "error", "error": "Camera name is required."}, status=400)
+                return
+
+            try:
+                lat = float(body.get("lat", 15.8281))
+                lon = float(body.get("lon", 78.0373))
+            except (ValueError, TypeError):
+                self._send_json({"status": "error", "error": "Invalid latitude or longitude format."}, status=400)
+                return
+
+            cams_dict = APP_STATE.setdefault("cameras", dict(CAMERA_LOCATIONS))
+            cam_idx = len(cams_dict) + 1
+            cam_code = body.get("code", "").strip() or f"CAM-{cam_idx:02d}: {cam_name} ({lat:.4f}, {lon:.4f})"
+            desc = body.get("description", "Surveillance CCTV Camera Node").strip()
+
+            cam_entry = {
+                "lat": lat,
+                "lon": lon,
+                "label": cam_code,
+                "description": desc,
+            }
+
+            cams_dict[cam_name] = cam_entry
+            CAMERA_LOCATIONS[cam_name] = cam_entry
+
+            print(f"[+] New surveillance camera node registered: {cam_name} at ({lat}, {lon}) by Police Command")
+
+            self._send_json({
+                "status": "success",
+                "message": f"Camera node '{cam_name}' successfully added to surveillance network.",
+                "camera": {
+                    "id": cam_idx,
+                    "name": cam_name,
+                    "label": cam_code,
+                    "lat": lat,
+                    "lon": lon,
+                    "description": desc,
+                }
+            }, status=201)
+            return
+
+        if parsed.path == "/api/cameras/delete":
+            if role_header == "ngo":
+                self._send_json({"status": "error", "error": "Access Denied: Only Police Command can remove camera locations."}, status=403)
+                return
+
+            cam_name = body.get("name", "").strip()
+            cams_dict = APP_STATE.setdefault("cameras", dict(CAMERA_LOCATIONS))
+            if cam_name in cams_dict:
+                del cams_dict[cam_name]
+                if cam_name in CAMERA_LOCATIONS:
+                    del CAMERA_LOCATIONS[cam_name]
+                self._send_json({"status": "success", "message": f"Camera node '{cam_name}' removed."})
+                return
+            self._send_json({"status": "error", "error": "Camera not found."}, status=404)
             return
 
         if parsed.path == "/api/teams/add":
@@ -4536,13 +4779,25 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
 def _get_demo_data(top_k: int = 5, speed: float | None = None) -> dict:
     from .zones import SearchZoneAnalyzer, zones_to_geojson
     graph, person, now = build_demo()
+
+    cams_dict = APP_STATE.get("cameras", CAMERA_LOCATIONS)
+    existing_names = {name for _, name, _, _ in PLACES}
+    next_id = max([i for i, _, _, _ in PLACES], default=len(PLACES)) + 1
+    combined_places = list(PLACES)
+    for cam_name, cam_info in cams_dict.items():
+        if cam_name not in existing_names:
+            combined_places.append((next_id, cam_name, cam_info["lat"], cam_info["lon"]))
+            graph.add_location(Location(next_id, cam_name, GeoPoint(cam_info["lat"], cam_info["lon"])))
+            next_id += 1
+    graph.connect_nearby(2.0)
+
     analyzer = SearchZoneAnalyzer(graph)
     reach = analyzer.reach_km(person, now, speed_kmph=speed)
     zones = analyzer.analyze(person, now=now, top_k=top_k, speed_kmph=speed)
     return {
         "person": {"name": person.name},
         "reach_km": reach,
-        "all_locations": [{"id": i, "name": name, "lat": lat, "lon": lon} for i, name, lat, lon in PLACES],
+        "all_locations": [{"id": i, "name": name, "lat": lat, "lon": lon} for i, name, lat, lon in combined_places],
         "zones": [z.to_dict() for z in zones],
         "geojson": json.loads(zones_to_geojson(zones)),
     }
