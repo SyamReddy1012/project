@@ -466,9 +466,15 @@ HTML_APP = """<!DOCTYPE html>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   
-  <!-- Leaflet GIS Map CSS & JS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Leaflet GIS Map CSS & JS with Fast Multi-CDN Support -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script>
+    if (typeof L === 'undefined') {
+      document.write('<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />');
+      document.write('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>');
+    }
+  </script>
 
   <style>
     :root {
@@ -1047,11 +1053,24 @@ HTML_APP = """<!DOCTYPE html>
 
     #admin-map, #ngo-map {
       height: 460px;
+      min-height: 420px;
+      width: 100%;
       border-radius: 12px;
       border: 1px solid var(--card-border);
       z-index: 1;
       overflow: hidden;
       box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.25);
+      position: relative;
+      background: #0b1329;
+    }
+    .leaflet-container {
+      font-family: inherit;
+      width: 100% !important;
+      height: 100% !important;
+      background: #0b1329 !important;
+    }
+    [data-theme="light"] .leaflet-container {
+      background: #e2e8f0 !important;
     }
 
     /* TACTICAL VIDEO SCANNER */
@@ -2679,6 +2698,130 @@ HTML_APP = """<!DOCTYPE html>
       }
     }
 
+    // MULTI-CDN TILE LAYER FACTORY
+    function createTileLayer(theme) {
+      const isDark = (theme === 'dark');
+      const cartoDarkUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png';
+      const osmUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+      const initialUrl = isDark ? cartoDarkUrl : osmUrl;
+
+      const layer = L.tileLayer(initialUrl, {
+        maxZoom: 19,
+        subdomains: 'abcd',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors'
+      });
+
+      layer.on('tileerror', function() {
+        if (layer._url !== osmUrl) {
+          console.warn('Carto tile error, falling back to OpenStreetMap standard tiles');
+          layer.setUrl(osmUrl);
+        }
+      });
+
+      return layer;
+    }
+
+    // SAFE LEAFLET LOADER GUARD
+    function whenLeafletReady(callback) {
+      if (typeof L !== 'undefined') {
+        callback();
+      } else {
+        let attempts = 0;
+        const timer = setInterval(() => {
+          attempts++;
+          if (typeof L !== 'undefined') {
+            clearInterval(timer);
+            callback();
+          } else if (attempts > 40) {
+            clearInterval(timer);
+            console.error("Leaflet map library failed to load.");
+            showToast("⚠️ Map library loading error. Please refresh the page.");
+          }
+        }, 100);
+      }
+    }
+
+    // RESILIENT MAP INITIALIZATION (Only attaches when container is in DOM)
+    function initAdminMap() {
+      if (typeof L === 'undefined') return;
+      const container = document.getElementById('admin-map');
+      if (!container) return;
+
+      if (!adminMap) {
+        adminMap = L.map('admin-map', {
+          center: [15.8281, 78.0450],
+          zoom: 14,
+          zoomControl: true,
+          preferCanvas: true
+        });
+
+        const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+        adminTileLayer = createTileLayer(theme);
+        adminTileLayer.addTo(adminMap);
+
+        adminLayers = L.layerGroup().addTo(adminMap);
+        layerCctvGroup = L.layerGroup().addTo(adminMap);
+        layerZonesGroup = L.layerGroup().addTo(adminMap);
+        layerCasesGroup = L.layerGroup().addTo(adminMap);
+        layerTeamsGroup = L.layerGroup().addTo(adminMap);
+      }
+
+      if (container.offsetWidth > 0) {
+        adminMap.invalidateSize(true);
+      }
+    }
+
+    function initNgoMap() {
+      if (typeof L === 'undefined') return;
+      const container = document.getElementById('ngo-map');
+      if (!container) return;
+
+      if (!ngoMap) {
+        ngoMap = L.map('ngo-map', {
+          center: [15.8320, 78.0440],
+          zoom: 14,
+          zoomControl: true,
+          preferCanvas: true
+        });
+
+        const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+        ngoTileLayer = createTileLayer(theme);
+        ngoTileLayer.addTo(ngoMap);
+
+        ngoLayers = L.layerGroup().addTo(ngoMap);
+      }
+
+      if (container.offsetWidth > 0) {
+        ngoMap.invalidateSize(true);
+      }
+    }
+
+    function initMaps() {
+      initAdminMap();
+      initNgoMap();
+    }
+
+    function attachMapResizeObservers() {
+      if (window.ResizeObserver) {
+        const adminEl = document.getElementById('admin-map');
+        if (adminEl) {
+          new ResizeObserver(() => {
+            if (adminEl.offsetWidth > 0 && adminMap) {
+              adminMap.invalidateSize(true);
+            }
+          }).observe(adminEl);
+        }
+        const ngoEl = document.getElementById('ngo-map');
+        if (ngoEl) {
+          new ResizeObserver(() => {
+            if (ngoEl.offsetWidth > 0 && ngoMap) {
+              ngoMap.invalidateSize(true);
+            }
+          }).observe(ngoEl);
+        }
+      }
+    }
+
     // ROLE & PERMISSION MANAGEMENT
     function applyRolePermissions(role) {
       loggedInRole = role;
@@ -2701,7 +2844,6 @@ HTML_APP = """<!DOCTYPE html>
         const teamName = loggedInTeam ? loggedInTeam.name : 'Search Party Unit';
         if (disp) disp.innerText = `Search Party: ${teamName}`;
 
-        // Strictly hide camera addition controls from NGO view
         const btnAddCam = document.getElementById('btn-add-camera');
         if (btnAddCam) btnAddCam.style.display = 'none';
         const btnMapAddCam = document.getElementById('btn-map-add-cam');
@@ -2710,8 +2852,14 @@ HTML_APP = """<!DOCTYPE html>
         if (modalCam) modalCam.style.display = 'none';
 
         currentRole = 'ngo';
-        loadNgoRoute();
-        setTimeout(() => ngoMap && ngoMap.invalidateSize(), 200);
+        loadNotifications();
+
+        whenLeafletReady(() => {
+          setTimeout(() => {
+            initNgoMap();
+            loadNgoRoute();
+          }, 80);
+        });
       } else {
         if (tabAdmin) {
           tabAdmin.style.display = 'inline-block';
@@ -2728,7 +2876,6 @@ HTML_APP = """<!DOCTYPE html>
         if (dot) dot.className = 'dot role-admin';
         if (disp) disp.innerText = 'Admin: Police Command';
 
-        // Enable camera addition controls exclusively for Admin role
         const btnAddCam = document.getElementById('btn-add-camera');
         if (btnAddCam) btnAddCam.style.display = 'inline-block';
         const btnMapAddCam = document.getElementById('btn-map-add-cam');
@@ -2736,17 +2883,21 @@ HTML_APP = """<!DOCTYPE html>
 
         currentRole = 'admin';
         loadNotifications();
-        setTimeout(() => adminMap && adminMap.invalidateSize(), 200);
+
+        whenLeafletReady(() => {
+          setTimeout(() => {
+            initAdminMap();
+            if (adminMap) {
+              adminMap.invalidateSize(true);
+              adminMap.setView([15.8281, 78.0450], 14);
+            }
+            loadMapData();
+          }, 80);
+        });
       }
     }
 
     // THEME HANDLING (DARK / LIGHT) & DYNAMIC MAP TILES
-    function getTileUrl(theme) {
-      return theme === 'dark' 
-        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-    }
-
     function initTheme() {
       const saved = localStorage.getItem('mptracker_theme') || 'dark';
       document.documentElement.setAttribute('data-theme', saved);
@@ -2759,9 +2910,16 @@ HTML_APP = """<!DOCTYPE html>
       localStorage.setItem('mptracker_theme', next);
       showToast(`Switched to ${next.toUpperCase()} mode`);
 
-      const tileUrl = getTileUrl(next);
-      if (adminTileLayer) adminTileLayer.setUrl(tileUrl);
-      if (ngoTileLayer) ngoTileLayer.setUrl(tileUrl);
+      if (adminMap && adminTileLayer) {
+        adminMap.removeLayer(adminTileLayer);
+        adminTileLayer = createTileLayer(next);
+        adminTileLayer.addTo(adminMap);
+      }
+      if (ngoMap && ngoTileLayer) {
+        ngoMap.removeLayer(ngoTileLayer);
+        ngoTileLayer = createTileLayer(next);
+        ngoTileLayer.addTo(ngoMap);
+      }
     }
 
     // TOAST NOTIFICATION
@@ -2892,7 +3050,6 @@ HTML_APP = """<!DOCTYPE html>
       }
     }
 
-
     // CAMERA REGISTRY & DYNAMIC NODE MANAGEMENT
     let allCameras = [];
 
@@ -2973,38 +3130,15 @@ HTML_APP = """<!DOCTYPE html>
         e.target.reset();
         showToast(`📹 Camera registered: ${name}`);
 
-        // Reload cameras and select the new camera in scanner
         await loadCameras(name);
         await loadMapData();
 
-        // Focus map on the new camera
         if (adminMap) {
           adminMap.flyTo([lat, lon], 16, { duration: 1.2 });
         }
       } catch (err) {
         console.error('Error adding camera:', err);
         showToast('⚠️ Network error adding camera node.');
-      }
-    }
-
-    // MAP INITIALIZATION
-    function initMaps() {
-      const theme = document.documentElement.getAttribute('data-theme') || 'dark';
-      const tileUrl = getTileUrl(theme);
-
-      if (!adminMap) {
-        adminMap = L.map('admin-map').setView([15.828, 78.045], 14);
-        adminTileLayer = L.tileLayer(tileUrl, { maxZoom: 18, attribution: '&copy; CartoDB &copy; OpenStreetMap' }).addTo(adminMap);
-        adminLayers = L.layerGroup().addTo(adminMap);
-        layerCctvGroup = L.layerGroup().addTo(adminMap);
-        layerZonesGroup = L.layerGroup().addTo(adminMap);
-        layerCasesGroup = L.layerGroup().addTo(adminMap);
-        layerTeamsGroup = L.layerGroup().addTo(adminMap);
-      }
-      if (!ngoMap) {
-        ngoMap = L.map('ngo-map').setView([15.832, 78.044], 14);
-        ngoTileLayer = L.tileLayer(tileUrl, { maxZoom: 18, attribution: '&copy; CartoDB &copy; OpenStreetMap' }).addTo(ngoMap);
-        ngoLayers = L.layerGroup().addTo(ngoMap);
       }
     }
 
@@ -3076,7 +3210,6 @@ HTML_APP = """<!DOCTYPE html>
         allCases = await res.json();
         renderCasesTable();
         populateNgoCaseSelector();
-        // Redraw missing persons layer on map
         plotCasesOnMap();
       } catch (e) { console.error(e); }
     }
@@ -3226,17 +3359,18 @@ HTML_APP = """<!DOCTYPE html>
 
     // LOAD MAP DATA WITH RICH INTERACTIVE POPUPS & MULTI-LAYERS
     async function loadMapData() {
-      initMaps();
+      initAdminMap();
+      if (!adminMap) return;
+
       try {
         const res = await fetch(`/api/demo?top=${activeZoneCount}&speed=${currentMobilitySpeed}`);
         const data = await res.json();
 
-        // 1. Clear layer groups
         if (layerCctvGroup) layerCctvGroup.clearLayers();
         if (layerZonesGroup) layerZonesGroup.clearLayers();
         if (layerTeamsGroup) layerTeamsGroup.clearLayers();
 
-        // 2. Plot CCTV Nodes
+        // Plot CCTV Nodes
         data.all_locations.forEach(loc => {
           const marker = L.circleMarker([loc.lat, loc.lon], {
             radius: 6, color: '#38bdf8', fillColor: '#08101e', fillOpacity: 0.9, weight: 2
@@ -3254,7 +3388,7 @@ HTML_APP = """<!DOCTYPE html>
           layerCctvGroup.addLayer(marker);
         });
 
-        // 3. Plot Top K Search Zones with Mobility Perimeter
+        // Plot Top K Search Zones with Mobility Perimeter
         const colors = ['#ef4444', '#f59e0b', '#3b82f6', '#10b981', '#a855f7', '#ec4899', '#06b6d4', '#84cc16'];
         data.zones.forEach((z, i) => {
           const color = colors[i] || '#64748b';
@@ -3278,7 +3412,7 @@ HTML_APP = """<!DOCTYPE html>
           layerZonesGroup.addLayer(dot);
         });
 
-        // 4. Plot Rescue Bases
+        // Plot Rescue Bases
         allTeams.forEach(t => {
           const baseMarker = L.circleMarker([t.lat, t.lon], {
             radius: 9, color: '#10b981', fillColor: '#064e3b', fillOpacity: 0.9, weight: 3
@@ -3294,6 +3428,9 @@ HTML_APP = """<!DOCTYPE html>
         });
 
         plotCasesOnMap();
+
+        // Refresh container dimensions
+        adminMap.invalidateSize(true);
 
       } catch (e) { console.error(e); }
     }
@@ -3343,7 +3480,6 @@ HTML_APP = """<!DOCTYPE html>
       document.getElementById('dossier-team').innerText = c.assigned_team || 'Unassigned';
       document.getElementById('dossier-coords').innerText = `${(c.lat || 15.8281).toFixed(4)}, ${(c.lon || 78.0373).toFixed(4)}`;
 
-      // Build Investigation Stepper Timeline
       const stepper = document.getElementById('dossier-timeline');
       const isResolved = c.status === 'RESCUED' || c.status === 'CLOSED';
       stepper.innerHTML = `
@@ -3357,7 +3493,7 @@ HTML_APP = """<!DOCTYPE html>
         </div>
         <div class="timeline-step completed">
           <div class="timeline-step-title">3. Surveillance Sighting Graph Activated</div>
-          <div class="timeline-step-desc">14 camera vertices and mobility speed perimeters calibrated for tracking.</div>
+          <div class="timeline-step-desc">Surveillance camera vertices and mobility speed perimeters calibrated for tracking.</div>
         </div>
         <div class="timeline-step ${isResolved ? 'completed' : 'active-step'}">
           <div class="timeline-step-title">4. Ground Search Unit Dispatched</div>
@@ -3369,7 +3505,6 @@ HTML_APP = """<!DOCTYPE html>
         </div>
       `;
 
-      // Update resolve button visibility
       const resBtn = document.getElementById('btn-dossier-resolve');
       if (resBtn) {
         resBtn.style.display = (c.status === 'ACTIVE') ? 'inline-block' : 'none';
@@ -3387,13 +3522,18 @@ HTML_APP = """<!DOCTYPE html>
       if (!currentDossierCaseId) return;
       const c = allCases.find(item => item.id === currentDossierCaseId);
       closeCaseDossier();
-      if (c && adminMap) {
+      if (c) {
         switchView('admin');
-        const coords = [c.lat || 15.8281, c.lon || 78.0373];
-        adminMap.flyTo(coords, 16, { duration: 1.2 });
-        const mapEl = document.getElementById('admin-map');
-        if (mapEl) mapEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        showToast(`Located Case #${c.id} on Sighting Graph`);
+        setTimeout(() => {
+          if (adminMap) {
+            const coords = [c.lat || 15.8281, c.lon || 78.0373];
+            adminMap.invalidateSize(true);
+            adminMap.flyTo(coords, 16, { duration: 1.2 });
+            const mapEl = document.getElementById('admin-map');
+            if (mapEl) mapEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            showToast(`Located Case #${c.id} on Sighting Graph`);
+          }
+        }, 150);
       }
     }
 
@@ -3441,12 +3581,7 @@ HTML_APP = """<!DOCTYPE html>
       const id = document.getElementById('poster-case-id').innerText;
       const loc = document.getElementById('poster-loc').innerText;
       const clothes = document.getElementById('poster-clothes').innerText;
-      const text = `🚨 EMERGENCY MISSING PERSON ALERT 🚨
-Name: ${name} (Case ${id})
-Last Seen: ${loc}
-Attire: ${clothes}
-Hotline: +91 6303126628 / DIAL 100
-Missing Person Search-and-Track System (Problem Statement 112)`;
+      const text = `🚨 EMERGENCY MISSING PERSON ALERT 🚨\nName: ${name} (Case ${id})\nLast Seen: ${loc}\nAttire: ${clothes}\nHotline: +91 6303126628 / DIAL 100\nMissing Person Search-and-Track System (Problem Statement 112)`;
 
       if (navigator.clipboard) {
         navigator.clipboard.writeText(text).then(() => {
@@ -3459,7 +3594,9 @@ Missing Person Search-and-Track System (Problem Statement 112)`;
 
     // STREET-LEVEL ROAD ROUTING FROM SPECIFIC LOGGED-IN NGO'S BASE
     async function loadNgoRoute(caseId = null) {
-      initMaps();
+      initNgoMap();
+      if (!ngoMap) return;
+
       try {
         const teamParam = loggedInTeam ? `team_id=${loggedInTeam.id}` : '';
         const selCaseId = caseId || (document.getElementById('resolve-case-id') ? document.getElementById('resolve-case-id').value : '');
@@ -3535,7 +3672,18 @@ Missing Person Search-and-Track System (Problem Statement 112)`;
           lineJoin: 'round'
         }).addTo(ngoLayers);
 
-        ngoMap.fitBounds(casingPoly.getBounds(), { padding: [45, 45] });
+        // Safe bounds fitting
+        ngoMap.invalidateSize(true);
+        const mapSize = ngoMap.getSize();
+        if (mapSize && mapSize.x > 80 && mapSize.y > 80 && casingPoly && casingPoly.getBounds().isValid()) {
+          try {
+            ngoMap.fitBounds(casingPoly.getBounds(), { padding: [40, 40], maxZoom: 16 });
+          } catch (err) {
+            ngoMap.setView([startLat, startLon], 14);
+          }
+        } else {
+          ngoMap.setView([startLat, startLon], 14);
+        }
 
       } catch (e) {
         console.error("Failed to load street route", e);
@@ -3584,7 +3732,6 @@ Missing Person Search-and-Track System (Problem Statement 112)`;
 
       currentGpsInterval = setInterval(() => {
         if (currentGpsStep >= totalSteps - 1) {
-          // Arrived at destination
           clearInterval(currentGpsInterval);
           isGpsSimRunning = false;
           document.getElementById('btn-start-sim').style.display = 'inline-block';
@@ -3604,12 +3751,10 @@ Missing Person Search-and-Track System (Problem Statement 112)`;
         const curCoord = currentRouteCoords[currentGpsStep];
         simMarker.setLatLng(curCoord);
 
-        // Update speedometer with realistic driving speed jitter
         const baseSpeed = 42;
         const jitter = Math.floor(Math.sin(currentGpsStep) * 6);
         document.getElementById('sim-speedo-val').innerText = (baseSpeed + jitter).toString();
 
-        // Calculate progress remaining
         const remainingPct = 1 - (currentGpsStep / (totalSteps - 1));
         const distRemaining = (currentRouteDistKm * remainingPct).toFixed(2);
         const etaRemaining = (currentRouteEtaMins * remainingPct).toFixed(1);
@@ -3667,14 +3812,29 @@ Missing Person Search-and-Track System (Problem Statement 112)`;
         dot.className = 'dot role-admin';
         disp.innerText = 'Admin: Police Command';
         loadNotifications();
-        setTimeout(() => adminMap && adminMap.invalidateSize(), 200);
+        whenLeafletReady(() => {
+          setTimeout(() => {
+            initAdminMap();
+            if (adminMap) {
+              adminMap.invalidateSize(true);
+            }
+            loadMapData();
+          }, 80);
+        });
       } else {
         dot.className = 'dot role-ngo';
         const teamName = loggedInTeam ? loggedInTeam.name : 'Helping Hands NGO';
         disp.innerText = `Search Party: ${teamName}`;
-        loadNgoRoute();
         loadNotifications();
-        setTimeout(() => ngoMap && ngoMap.invalidateSize(), 200);
+        whenLeafletReady(() => {
+          setTimeout(() => {
+            initNgoMap();
+            if (ngoMap) {
+              ngoMap.invalidateSize(true);
+            }
+            loadNgoRoute();
+          }, 80);
+        });
       }
     }
 
@@ -3766,7 +3926,7 @@ Missing Person Search-and-Track System (Problem Statement 112)`;
         div.innerHTML = `
           <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; flex-wrap: wrap;">
             <div>
-              <div style="display: flex; align-items: center; gap: 0.4rem;">
+              <div style="display: align-items: center; gap: 0.4rem;">
                 <span class="badge" style="background: #ef4444;">CASE ALLOTMENT ORDER</span>
                 ${!n.read ? '<span class="badge" style="background: #f59e0b;">NEW UNREAD</span>' : '<span class="badge" style="background: #10b981;">ACKNOWLEDGED</span>'}
               </div>
@@ -3963,8 +4123,7 @@ Missing Person Search-and-Track System (Problem Statement 112)`;
         closeAddNgoModal();
         e.target.reset();
         showToast(`NGO Registered: ${saved.name}`);
-        loadCameras();
-      loadTeams();
+        loadTeams();
         loadStats();
       } catch (err) { console.error(err); }
     }
@@ -4069,7 +4228,9 @@ Missing Person Search-and-Track System (Problem Statement 112)`;
         document.getElementById('ngo-subject-name').innerText = c.name;
         document.getElementById('ngo-target-loc').innerText = c.last_seen_location;
         document.getElementById('ngo-tag-status').innerText = `Status: ${c.status}`;
-        loadNgoRoute(c.id);
+        if (currentRole === 'ngo') {
+          loadNgoRoute(c.id);
+        }
       }
     }
 
@@ -4172,22 +4333,28 @@ Missing Person Search-and-Track System (Problem Statement 112)`;
     function focusCameraZoneOnMap() {
       const camSelect = document.getElementById('video-camera-loc');
       const camLoc = camSelect.value;
-      const coords = {
-        "CAR STAND": [15.8281, 78.0373],
-        "Budhwarpet Market": [15.8350, 78.0450],
-        "Kurnool City Railway": [15.8310, 78.0420],
-        "Kurnool Bus Stand": [15.8281, 78.0373],
-        "RGM grounds": [15.8310, 78.0420],
-        "cantene": [15.8350, 78.0450],
-        "DS labs": [15.8200, 78.0450],
-        "RGM hostel": [15.8150, 78.0300],
-        "RGM gardens": [15.8340, 78.0560],
-        "Konda Reddy Fort": [15.8340, 78.0560],
-        "maha nandhi": [15.8100, 78.0600],
-        "Collectorate": [15.8200, 78.0450],
-        "Government Hospital": [15.8150, 78.0300],
-        "Tungabhadra Bridge": [15.8420, 78.0300]
-      }[camLoc] || [15.8281, 78.0373];
+      const foundCam = allCameras.find(c => c.name === camLoc);
+      let coords = [15.8281, 78.0373];
+      if (foundCam) {
+        coords = [foundCam.lat, foundCam.lon];
+      } else {
+        coords = {
+          "CAR STAND": [15.8281, 78.0373],
+          "Budhwarpet Market": [15.8350, 78.0450],
+          "Kurnool City Railway": [15.8310, 78.0420],
+          "Kurnool Bus Stand": [15.8281, 78.0373],
+          "RGM grounds": [15.8310, 78.0420],
+          "cantene": [15.8350, 78.0450],
+          "DS labs": [15.8200, 78.0450],
+          "RGM hostel": [15.8150, 78.0300],
+          "RGM gardens": [15.8340, 78.0560],
+          "Konda Reddy Fort": [15.8340, 78.0560],
+          "maha nandhi": [15.8100, 78.0600],
+          "Collectorate": [15.8200, 78.0450],
+          "Government Hospital": [15.8150, 78.0300],
+          "Tungabhadra Bridge": [15.8420, 78.0300]
+        }[camLoc] || [15.8281, 78.0373];
+      }
 
       if (adminMap) {
         adminMap.flyTo(coords, 16, { duration: 1.2 });
@@ -4232,7 +4399,6 @@ Missing Person Search-and-Track System (Problem Statement 112)`;
           Auto-Dispatch: Response unit <b>${targetTeamName}</b> mobilized to <b>${selectedCamKey}</b> via turn-by-turn road route.
         `;
 
-        // Play synthesized audible chime
         playDetectionChime();
 
         await fetch('/api/scan', {
@@ -4241,7 +4407,6 @@ Missing Person Search-and-Track System (Problem Statement 112)`;
           body: JSON.stringify({ camera_location: selectedCamKey, case_id: matchCaseId, person_name: matchPerson, confidence: 0.28 })
         });
 
-        // Draw bounding box on overlay canvas
         const canvas = document.getElementById('canvas-overlay');
         canvas.width = canvas.offsetWidth;
         canvas.height = canvas.offsetHeight;
@@ -4266,7 +4431,6 @@ Missing Person Search-and-Track System (Problem Statement 112)`;
         const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
         const isInput = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select';
 
-        // Esc: Close any open modal
         if (e.key === 'Escape') {
           closeAddCaseModal();
           closeAddNgoModal();
@@ -4274,9 +4438,9 @@ Missing Person Search-and-Track System (Problem Statement 112)`;
           closeNotificationModal();
           closeCaseDossier();
           closePosterModal();
+          closeAddCameraModal();
         }
 
-        // Ctrl+K or '/': Focus Case Search Input
         if (!isInput && ((e.ctrlKey && e.key.toLowerCase() === 'k') || e.key === '/')) {
           e.preventDefault();
           const searchInput = document.getElementById('case-search-input');
@@ -4287,12 +4451,10 @@ Missing Person Search-and-Track System (Problem Statement 112)`;
           }
         }
 
-        // 'L': Toggle theme
         if (!isInput && (e.key === 'l' || e.key === 'L')) {
           toggleTheme();
         }
 
-        // '1' or '2': Tab switcher when not typing
         if (!isInput && e.key === '1' && loggedInRole === 'admin') {
           switchView('admin');
         } else if (!isInput && e.key === '2') {
@@ -4303,13 +4465,13 @@ Missing Person Search-and-Track System (Problem Statement 112)`;
 
     window.addEventListener('DOMContentLoaded', () => {
       initTheme();
-      initMaps();
       initTelemetryTicker();
       initKeyboardShortcuts();
+      attachMapResizeObservers();
+      loadCameras();
       loadTeams();
       loadStats();
       loadCases();
-      loadMapData();
       loadNotifications();
       restoreSession();
       setInterval(loadNotifications, 8000);
