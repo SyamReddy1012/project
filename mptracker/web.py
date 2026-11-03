@@ -33,26 +33,201 @@ from .db import (
 )
 from .demo import build_demo, PLACES
 from .graph import SightingGraph
-from .models import GeoPoint, Location
+from .models import GeoPoint, Location, Person, Sighting
 
 
 
-# Real surveillance & landmark locations in Kurnool area
+# Multi-City Jurisdiction Configuration (10 Major Indian Metropolitan & Regional Cities)
+CITIES = {
+    "kurnool": {
+        "id": "kurnool",
+        "name": "Kurnool",
+        "state": "Andhra Pradesh",
+        "lat": 15.8281,
+        "lon": 78.0373,
+        "zoom": 14,
+        "description": "Historic gateway city of Rayalaseema & Tungabhadra River basin",
+    },
+    "hyderabad": {
+        "id": "hyderabad",
+        "name": "Hyderabad",
+        "state": "Telangana",
+        "lat": 17.3850,
+        "lon": 78.4867,
+        "zoom": 13,
+        "description": "Capital metro hub, major transit junctions & IT cyber corridor",
+    },
+    "bengaluru": {
+        "id": "bengaluru",
+        "name": "Bengaluru",
+        "state": "Karnataka",
+        "lat": 12.9716,
+        "lon": 77.5946,
+        "zoom": 13,
+        "description": "Southern tech capital & central inter-state transport interchange",
+    },
+    "vijayawada": {
+        "id": "vijayawada",
+        "name": "Vijayawada",
+        "state": "Andhra Pradesh",
+        "lat": 16.5062,
+        "lon": 80.6480,
+        "zoom": 14,
+        "description": "Krishna River commercial capital & major railway/bus artery",
+    },
+    "visakhapatnam": {
+        "id": "visakhapatnam",
+        "name": "Visakhapatnam (Vizag)",
+        "state": "Andhra Pradesh",
+        "lat": 17.6868,
+        "lon": 83.2185,
+        "zoom": 13,
+        "description": "Eastern coastal naval port city with extensive beachfront network",
+    },
+    "tirupati": {
+        "id": "tirupati",
+        "name": "Tirupati",
+        "state": "Andhra Pradesh",
+        "lat": 13.6288,
+        "lon": 79.4192,
+        "zoom": 14,
+        "description": "High-density pilgrimage & transit hub at the foot of Tirumala Hills",
+    },
+    "nandyal": {
+        "id": "nandyal",
+        "name": "Nandyal",
+        "state": "Andhra Pradesh",
+        "lat": 15.4786,
+        "lon": 78.4836,
+        "zoom": 14,
+        "description": "Commercial agricultural hub & critical junction on Kurnool highway",
+    },
+    "chennai": {
+        "id": "chennai",
+        "name": "Chennai",
+        "state": "Tamil Nadu",
+        "lat": 13.0827,
+        "lon": 80.2707,
+        "zoom": 13,
+        "description": "Major coastal metropolis, railway terminus & industrial hub",
+    },
+    "mumbai": {
+        "id": "mumbai",
+        "name": "Mumbai",
+        "state": "Maharashtra",
+        "lat": 19.0760,
+        "lon": 72.8777,
+        "zoom": 13,
+        "description": "Financial capital with high-density suburban railway & harbor network",
+    },
+    "delhi": {
+        "id": "delhi",
+        "name": "Delhi (NCR)",
+        "state": "National Capital",
+        "lat": 28.6139,
+        "lon": 77.2090,
+        "zoom": 13,
+        "description": "National capital territory with extensive metro & inter-state terminals",
+    },
+}
+
+# Multi-City Surveillance Cameras & Landmark Sighting Nodes
 CAMERA_LOCATIONS = {
-    "CAR STAND": {"lat": 15.8281, "lon": 78.0373, "label": "CAM-01: CAR STAND Main Gate (15.8281, 78.0373)"},
-    "Budhwarpet Market": {"lat": 15.8350, "lon": 78.0450, "label": "CAM-02: Budhwarpet Market Junction (15.8350, 78.0450)"},
-    "Kurnool City Railway": {"lat": 15.8310, "lon": 78.0420, "label": "CAM-03: Kurnool City Railway Station (15.8310, 78.0420)"},
-    "Kurnool Bus Stand": {"lat": 15.8281, "lon": 78.0373, "label": "CAM-04: Central Bus Stand Entrance (15.8281, 78.0373)"},
-    "RGM grounds": {"lat": 15.8310, "lon": 78.0420, "label": "CAM-05: RGM Grounds North Field (15.8310, 78.0420)"},
-    "cantene": {"lat": 15.8350, "lon": 78.0450, "label": "CAM-06: Campus Canteen Surveillance (15.8350, 78.0450)"},
-    "DS labs": {"lat": 15.8200, "lon": 78.0450, "label": "CAM-07: DS Labs Corridor (15.8200, 78.0450)"},
-    "RGM hostel": {"lat": 15.8150, "lon": 78.0300, "label": "CAM-08: RGM Hostel Gate (15.8150, 78.0300)"},
-    "RGM gardens": {"lat": 15.8340, "lon": 78.0560, "label": "CAM-09: RGM Gardens Perimeter (15.8340, 78.0560)"},
-    "Konda Reddy Fort": {"lat": 15.8340, "lon": 78.0560, "label": "CAM-10: Konda Reddy Fort Circle (15.8340, 78.0560)"},
-    "maha nandhi": {"lat": 15.8100, "lon": 78.0600, "label": "CAM-11: Maha Nandhi Road Junction (15.8100, 78.0600)"},
-    "Collectorate": {"lat": 15.8200, "lon": 78.0450, "label": "CAM-12: District Collectorate (15.8200, 78.0450)"},
-    "Government Hospital": {"lat": 15.8150, "lon": 78.0300, "label": "CAM-13: Government General Hospital (15.8150, 78.0300)"},
-    "Tungabhadra Bridge": {"lat": 15.8420, "lon": 78.0300, "label": "CAM-14: Tungabhadra River Bridge (15.8420, 78.0300)"},
+    # Kurnool
+    "CAR STAND": {"lat": 15.8281, "lon": 78.0373, "city": "kurnool", "label": "CAM-KNL-01: CAR STAND Main Gate (15.8281, 78.0373)"},
+    "Budhwarpet Market": {"lat": 15.8350, "lon": 78.0450, "city": "kurnool", "label": "CAM-KNL-02: Budhwarpet Market Junction (15.8350, 78.0450)"},
+    "Kurnool City Railway": {"lat": 15.8310, "lon": 78.0420, "city": "kurnool", "label": "CAM-KNL-03: Kurnool City Railway Station (15.8310, 78.0420)"},
+    "Kurnool Bus Stand": {"lat": 15.8281, "lon": 78.0373, "city": "kurnool", "label": "CAM-KNL-04: Central Bus Stand Entrance (15.8281, 78.0373)"},
+    "RGM grounds": {"lat": 15.8310, "lon": 78.0420, "city": "kurnool", "label": "CAM-KNL-05: RGM Grounds North Field (15.8310, 78.0420)"},
+    "cantene": {"lat": 15.8350, "lon": 78.0450, "city": "kurnool", "label": "CAM-KNL-06: Campus Canteen Surveillance (15.8350, 78.0450)"},
+    "DS labs": {"lat": 15.8200, "lon": 78.0450, "city": "kurnool", "label": "CAM-KNL-07: DS Labs Corridor (15.8200, 78.0450)"},
+    "RGM hostel": {"lat": 15.8150, "lon": 78.0300, "city": "kurnool", "label": "CAM-KNL-08: RGM Hostel Gate (15.8150, 78.0300)"},
+    "RGM gardens": {"lat": 15.8340, "lon": 78.0560, "city": "kurnool", "label": "CAM-KNL-09: RGM Gardens Perimeter (15.8340, 78.0560)"},
+    "Konda Reddy Fort": {"lat": 15.8340, "lon": 78.0560, "city": "kurnool", "label": "CAM-KNL-10: Konda Reddy Fort Circle (15.8340, 78.0560)"},
+    "maha nandhi": {"lat": 15.8100, "lon": 78.0600, "city": "kurnool", "label": "CAM-KNL-11: Maha Nandhi Road Junction (15.8100, 78.0600)"},
+    "Collectorate": {"lat": 15.8200, "lon": 78.0450, "city": "kurnool", "label": "CAM-KNL-12: District Collectorate (15.8200, 78.0450)"},
+    "Government Hospital": {"lat": 15.8150, "lon": 78.0300, "city": "kurnool", "label": "CAM-KNL-13: Government General Hospital (15.8150, 78.0300)"},
+    "Tungabhadra Bridge": {"lat": 15.8420, "lon": 78.0300, "city": "kurnool", "label": "CAM-KNL-14: Tungabhadra River Bridge (15.8420, 78.0300)"},
+
+    # Hyderabad
+    "Charminar Heritage Zone": {"lat": 17.3616, "lon": 78.4747, "city": "hyderabad", "label": "CAM-HYD-01: Charminar Heritage Area (17.3616, 78.4747)"},
+    "Secunderabad Railway Station": {"lat": 17.4344, "lon": 78.5017, "city": "hyderabad", "label": "CAM-HYD-02: Secunderabad Central Concourse (17.4344, 78.5017)"},
+    "HITEC City Cyber Towers": {"lat": 17.4504, "lon": 78.3808, "city": "hyderabad", "label": "CAM-HYD-03: Cyber Towers Main Junction (17.4504, 78.3808)"},
+    "Gachibowli Junction": {"lat": 17.4401, "lon": 78.3489, "city": "hyderabad", "label": "CAM-HYD-04: Gachibowli Outer Ring Road (17.4401, 78.3489)"},
+    "Kacheguda Railway Station": {"lat": 17.3892, "lon": 78.4975, "city": "hyderabad", "label": "CAM-HYD-05: Kacheguda Railway Terminal (17.3892, 78.4975)"},
+    "Mehdipatnam Bus Depot": {"lat": 17.3916, "lon": 78.4418, "city": "hyderabad", "label": "CAM-HYD-06: Mehdipatnam Ring Bus Station (17.3916, 78.4418)"},
+    "Hussain Sagar Tank Bund": {"lat": 17.4239, "lon": 78.4738, "city": "hyderabad", "label": "CAM-HYD-07: Tank Bund Promenade (17.4239, 78.4738)"},
+    "Jubilee Hills Checkpost": {"lat": 17.4319, "lon": 78.4073, "city": "hyderabad", "label": "CAM-HYD-08: Jubilee Hills Checkpost Circle (17.4319, 78.4073)"},
+    "Dilsukhnagar Metro Hub": {"lat": 17.3688, "lon": 78.5247, "city": "hyderabad", "label": "CAM-HYD-09: Dilsukhnagar Metro Complex (17.3688, 78.5247)"},
+    "Ameerpet Metro Junction": {"lat": 17.4375, "lon": 78.4483, "city": "hyderabad", "label": "CAM-HYD-10: Ameerpet Metro Interchange (17.4375, 78.4483)"},
+
+    # Bengaluru
+    "Majestic Central Terminal": {"lat": 12.9767, "lon": 77.5713, "city": "bengaluru", "label": "CAM-BLR-01: Majestic KSR Central Terminal (12.9767, 77.5713)"},
+    "MG Road Metro Station": {"lat": 12.9756, "lon": 77.6066, "city": "bengaluru", "label": "CAM-BLR-02: MG Road Metro Boulevard (12.9756, 77.6066)"},
+    "Koramangala Sony World Signal": {"lat": 12.9352, "lon": 77.6245, "city": "bengaluru", "label": "CAM-BLR-03: Koramangala 80ft Road Signal (12.9352, 77.6245)"},
+    "Whitefield ITPL Tech Zone": {"lat": 12.9863, "lon": 77.7308, "city": "bengaluru", "label": "CAM-BLR-04: ITPL Tech Park Main Gate (12.9863, 77.7308)"},
+    "Electronic City Phase 1 Toll": {"lat": 12.8452, "lon": 77.6602, "city": "bengaluru", "label": "CAM-BLR-05: Electronic City Expressway Toll (12.8452, 77.6602)"},
+    "Indiranagar 100ft Road": {"lat": 12.9784, "lon": 77.6408, "city": "bengaluru", "label": "CAM-BLR-06: Indiranagar 100ft Road Junction (12.9784, 77.6408)"},
+    "Yeshwanthpur Railway Junction": {"lat": 13.0238, "lon": 77.5501, "city": "bengaluru", "label": "CAM-BLR-07: Yeshwanthpur Terminal (13.0238, 77.5501)"},
+    "Silk Board Junction": {"lat": 12.9177, "lon": 77.6238, "city": "bengaluru", "label": "CAM-BLR-08: Silk Board Outer Ring Flyover (12.9177, 77.6238)"},
+
+    # Vijayawada
+    "PNBS Central Bus Station": {"lat": 16.5165, "lon": 80.6200, "city": "vijayawada", "label": "CAM-VJA-01: Pandit Nehru Bus Station (16.5165, 80.6200)"},
+    "Vijayawada Railway Junction": {"lat": 16.5186, "lon": 80.6203, "city": "vijayawada", "label": "CAM-VJA-02: Vijayawada Main Junction (16.5186, 80.6203)"},
+    "Prakasam Barrage Point": {"lat": 16.5090, "lon": 80.6065, "city": "vijayawada", "label": "CAM-VJA-03: Prakasam Barrage Krishna Bridge (16.5090, 80.6065)"},
+    "Kanaka Durga Temple Gate": {"lat": 16.5162, "lon": 80.6052, "city": "vijayawada", "label": "CAM-VJA-04: Kanaka Durga Temple Ghat Road (16.5162, 80.6052)"},
+    "Benz Circle Commercial Hub": {"lat": 16.4988, "lon": 80.6552, "city": "vijayawada", "label": "CAM-VJA-05: Benz Circle Flyover Corridor (16.4988, 80.6552)"},
+    "Besant Road Market Zone": {"lat": 16.5112, "lon": 80.6288, "city": "vijayawada", "label": "CAM-VJA-06: Besant Road Bazaar Gate (16.5112, 80.6288)"},
+    "Ramavarappadu Ring": {"lat": 16.5244, "lon": 80.6750, "city": "vijayawada", "label": "CAM-VJA-07: Ramavarappadu Highway Ring (16.5244, 80.6750)"},
+
+    # Visakhapatnam (Vizag)
+    "RK Beach Promenade": {"lat": 17.7126, "lon": 83.3182, "city": "visakhapatnam", "label": "CAM-VZG-01: Ramakrishna Beach Boulevard (17.7126, 83.3182)"},
+    "Visakhapatnam Railway Station": {"lat": 17.7215, "lon": 83.2906, "city": "visakhapatnam", "label": "CAM-VZG-02: Vizag Central Platform Gate (17.7215, 83.2906)"},
+    "Dwaraka RTC Bus Complex": {"lat": 17.7265, "lon": 83.3040, "city": "visakhapatnam", "label": "CAM-VZG-03: Dwaraka Central Bus Complex (17.7265, 83.3040)"},
+    "Jagadamba Junction": {"lat": 17.7118, "lon": 83.3015, "city": "visakhapatnam", "label": "CAM-VZG-04: Jagadamba Commercial Circle (17.7118, 83.3015)"},
+    "Rushikonda IT Hill": {"lat": 17.7818, "lon": 83.3855, "city": "visakhapatnam", "label": "CAM-VZG-05: Rushikonda IT SEZ Road (17.7818, 83.3855)"},
+    "Gajuwaka Industrial Hub": {"lat": 17.6908, "lon": 83.2132, "city": "visakhapatnam", "label": "CAM-VZG-06: Gajuwaka Junction (17.6908, 83.2132)"},
+    "Kailasagiri Viewpoint": {"lat": 17.7490, "lon": 83.3424, "city": "visakhapatnam", "label": "CAM-VZG-07: Kailasagiri Hill Entrance (17.7490, 83.3424)"},
+
+    # Tirupati
+    "Tirupati Central Railway Station": {"lat": 13.6267, "lon": 79.4217, "city": "tirupati", "label": "CAM-TPT-01: Tirupati Main Railway Terminal (13.6267, 79.4217)"},
+    "Central Bus Stand (CBS)": {"lat": 13.6282, "lon": 79.4261, "city": "tirupati", "label": "CAM-TPT-02: Tirupati Central Bus Station (13.6282, 79.4261)"},
+    "Alipiri Footpath Toll Gate": {"lat": 13.6521, "lon": 79.3872, "city": "tirupati", "label": "CAM-TPT-03: Alipiri Hill Footpath Toll Gate (13.6521, 79.3872)"},
+    "TUDA Circle": {"lat": 13.6334, "lon": 79.4168, "city": "tirupati", "label": "CAM-TPT-04: TUDA Administrative Circle (13.6334, 79.4168)"},
+    "Renigunta Junction": {"lat": 13.6496, "lon": 79.5164, "city": "tirupati", "label": "CAM-TPT-05: Renigunta Railway Interchange (13.6496, 79.5164)"},
+    "Ramanuja Circle": {"lat": 13.6310, "lon": 79.4312, "city": "tirupati", "label": "CAM-TPT-06: Ramanuja Circle Flyover (13.6310, 79.4312)"},
+
+    # Nandyal
+    "Nandyal Clock Tower": {"lat": 15.4820, "lon": 78.4870, "city": "nandyal", "label": "CAM-NDL-01: Nandyal Town Clock Tower (15.4820, 78.4870)"},
+    "Nandyal Railway Station": {"lat": 15.4912, "lon": 78.4815, "city": "nandyal", "label": "CAM-NDL-02: Nandyal Railway Junction (15.4912, 78.4815)"},
+    "RTC Central Bus Stand": {"lat": 15.4795, "lon": 78.4850, "city": "nandyal", "label": "CAM-NDL-03: Nandyal Bus Station (15.4795, 78.4850)"},
+    "Rythu Bazaar Gate": {"lat": 15.4850, "lon": 78.4890, "city": "nandyal", "label": "CAM-NDL-04: Rythu Bazaar Main Market (15.4850, 78.4890)"},
+    "Atmakur Gate Circle": {"lat": 15.4950, "lon": 78.4780, "city": "nandyal", "label": "CAM-NDL-05: Atmakur Highway Gate (15.4950, 78.4780)"},
+    "Balapanur Crossroad": {"lat": 15.4680, "lon": 78.4920, "city": "nandyal", "label": "CAM-NDL-06: Balapanur Road Junction (15.4680, 78.4920)"},
+
+    # Chennai
+    "Chennai Central Puratchi Thalaivar": {"lat": 13.0823, "lon": 80.2755, "city": "chennai", "label": "CAM-MAA-01: Chennai Central Concourse (13.0823, 80.2755)"},
+    "Koyambedu CMBT Bus Terminal": {"lat": 13.0694, "lon": 80.1948, "city": "chennai", "label": "CAM-MAA-02: Koyambedu Bus Terminus (13.0694, 80.1948)"},
+    "Marina Beach Promenade": {"lat": 13.0500, "lon": 80.2824, "city": "chennai", "label": "CAM-MAA-03: Marina Beach Service Road (13.0500, 80.2824)"},
+    "T. Nagar Panagal Park": {"lat": 13.0405, "lon": 80.2337, "city": "chennai", "label": "CAM-MAA-04: T. Nagar Retail Corridor (13.0405, 80.2337)"},
+    "Guindy Kathipara Flyover": {"lat": 13.0067, "lon": 80.2016, "city": "chennai", "label": "CAM-MAA-05: Kathipara Cloverleaf Junction (13.0067, 80.2016)"},
+    "Chennai International Airport": {"lat": 12.9941, "lon": 80.1709, "city": "chennai", "label": "CAM-MAA-06: Airport Arrival Terminal (12.9941, 80.1709)"},
+
+    # Mumbai
+    "Chhatrapati Shivaji Maharaj Terminus": {"lat": 18.9400, "lon": 72.8354, "city": "mumbai", "label": "CAM-BOM-01: CSMT Main Historic Concourse (18.9400, 72.8354)"},
+    "Dadar Central Station": {"lat": 19.0178, "lon": 72.8478, "city": "mumbai", "label": "CAM-BOM-02: Dadar Suburban Interchange (19.0178, 72.8478)"},
+    "Bandra Kurla Complex (BKC)": {"lat": 19.0657, "lon": 72.8687, "city": "mumbai", "label": "CAM-BOM-03: BKC Avenue Circle (19.0657, 72.8687)"},
+    "Gateway of India Promenade": {"lat": 18.9220, "lon": 72.8347, "city": "mumbai", "label": "CAM-BOM-04: Gateway Harbor Jetty (18.9220, 72.8347)"},
+    "Andheri Metro Hub": {"lat": 19.1197, "lon": 72.8468, "city": "mumbai", "label": "CAM-BOM-05: Andheri Railway & Metro (19.1197, 72.8468)"},
+    "Marine Drive Promenade": {"lat": 18.9432, "lon": 72.8230, "city": "mumbai", "label": "CAM-BOM-06: Queen's Necklace Marine Drive (18.9432, 72.8230)"},
+
+    # Delhi (NCR)
+    "New Delhi Railway Station (NDLS)": {"lat": 28.6429, "lon": 77.2195, "city": "delhi", "label": "CAM-DEL-01: NDLS Ajmeri Gate Concourse (28.6429, 77.2195)"},
+    "Rajiv Chowk Connaught Place": {"lat": 28.6328, "lon": 77.2197, "city": "delhi", "label": "CAM-DEL-02: Connaught Place Inner Circle (28.6328, 77.2197)"},
+    "Kashmiri Gate ISBT": {"lat": 28.6678, "lon": 77.2285, "city": "delhi", "label": "CAM-DEL-03: Kashmiri Gate Inter-State Bus (28.6678, 77.2285)"},
+    "India Gate Circle": {"lat": 28.6129, "lon": 77.2295, "city": "delhi", "label": "CAM-DEL-04: India Gate Kartavya Path (28.6129, 77.2295)"},
+    "Indira Gandhi Airport T3": {"lat": 28.5562, "lon": 77.1000, "city": "delhi", "label": "CAM-DEL-05: IGI Airport Terminal 3 (28.5562, 77.1000)"},
+    "Anand Vihar Terminal": {"lat": 28.6469, "lon": 77.3160, "city": "delhi", "label": "CAM-DEL-06: Anand Vihar Railway & Bus (28.6469, 77.3160)"},
 }
 
 INITIAL_CASES = [
@@ -62,6 +237,7 @@ INITIAL_CASES = [
         "age": 23,
         "gender": "Male",
         "clothes": "BLUE SHIRT",
+        "city": "kurnool",
         "last_seen_location": "CAR STAND",
         "status": "ACTIVE",
         "created_at": "Today, 14:10",
@@ -75,6 +251,7 @@ INITIAL_CASES = [
         "age": 19,
         "gender": "Male",
         "clothes": "black and white shirt",
+        "city": "kurnool",
         "last_seen_location": "RGM grounds",
         "status": "ACTIVE",
         "created_at": "Today, 12:45",
@@ -84,65 +261,140 @@ INITIAL_CASES = [
     },
     {
         "id": 3,
+        "name": "Rajesh Kumar",
+        "age": 24,
+        "gender": "Male",
+        "clothes": "Red polo shirt, jeans",
+        "city": "hyderabad",
+        "last_seen_location": "Charminar Heritage Zone",
+        "status": "ACTIVE",
+        "created_at": "Today, 11:20",
+        "assigned_team": "Hyderabad Disaster Quick Response Team",
+        "lat": 17.3616,
+        "lon": 78.4747,
+    },
+    {
+        "id": 4,
+        "name": "Priya Sharma",
+        "age": 21,
+        "gender": "Female",
+        "clothes": "Yellow kurti, white leggings",
+        "city": "bengaluru",
+        "last_seen_location": "Majestic Central Terminal",
+        "status": "ACTIVE",
+        "created_at": "Today, 09:30",
+        "assigned_team": "Bengaluru Red Cross Unit",
+        "lat": 12.9767,
+        "lon": 77.5713,
+    },
+    {
+        "id": 5,
+        "name": "Anand Varma",
+        "age": 31,
+        "gender": "Male",
+        "clothes": "Grey formal shirt, black pants",
+        "city": "vijayawada",
+        "last_seen_location": "PNBS Central Bus Station",
+        "status": "ACTIVE",
+        "created_at": "Yesterday, 20:15",
+        "assigned_team": "Amaravati Emergency Corps",
+        "lat": 16.5165,
+        "lon": 80.6200,
+    },
+    {
+        "id": 6,
+        "name": "Kavitha Rao",
+        "age": 27,
+        "gender": "Female",
+        "clothes": "Blue saree",
+        "city": "visakhapatnam",
+        "last_seen_location": "RK Beach Promenade",
+        "status": "ACTIVE",
+        "created_at": "Yesterday, 17:00",
+        "assigned_team": "Coastal Rescue Force",
+        "lat": 17.7126,
+        "lon": 83.3182,
+    },
+    {
+        "id": 7,
+        "name": "Venkatesh M",
+        "age": 58,
+        "gender": "Male",
+        "clothes": "White dhoti and shirt",
+        "city": "tirupati",
+        "last_seen_location": "Alipiri Footpath Toll Gate",
+        "status": "ACTIVE",
+        "created_at": "Yesterday, 15:45",
+        "assigned_team": "Tirumala Pilgrim Assistance Patrol",
+        "lat": 13.6521,
+        "lon": 79.3872,
+    },
+    {
+        "id": 8,
         "name": "Nani kumar",
         "age": 17,
         "gender": "Male",
         "clothes": "white shirt black pant",
+        "city": "kurnool",
         "last_seen_location": "cantene",
         "status": "ACTIVE",
-        "created_at": "Today, 11:30",
+        "created_at": "2 days ago",
         "assigned_team": "Volunteer Unit A",
         "lat": 15.8350,
         "lon": 78.0450,
     },
     {
-        "id": 4,
+        "id": 9,
         "name": "S.Yakub",
         "age": 20,
         "gender": "Male",
         "clothes": "black shirt with blue jeens",
+        "city": "kurnool",
         "last_seen_location": "DS labs",
         "status": "ACTIVE",
-        "created_at": "Yesterday, 18:20",
+        "created_at": "2 days ago",
         "assigned_team": "Helping Hands NGO",
         "lat": 15.8200,
         "lon": 78.0450,
     },
     {
-        "id": 5,
-        "name": "S.javeed",
-        "age": 19,
+        "id": 10,
+        "name": "Ramesh Reddy",
+        "age": 42,
         "gender": "Male",
-        "clothes": "greyish green shirt",
-        "last_seen_location": "RGM hostel",
+        "clothes": "Checkered shirt, grey trousers",
+        "city": "nandyal",
+        "last_seen_location": "Nandyal Clock Tower",
         "status": "ACTIVE",
-        "created_at": "Yesterday, 16:00",
-        "assigned_team": "City Police Patrol 1",
-        "lat": 15.8150,
-        "lon": 78.0300,
+        "created_at": "3 days ago",
+        "assigned_team": "Nandyal Volunteer Search Group",
+        "lat": 15.4820,
+        "lon": 78.4870,
     },
     {
-        "id": 6,
+        "id": 11,
         "name": "Tharnish",
         "age": 28,
         "gender": "Male",
         "clothes": "red shirt",
+        "city": "kurnool",
         "last_seen_location": "RGM gardens",
         "status": "RESCUED",
-        "created_at": "2 days ago",
+        "created_at": "4 days ago",
         "assigned_team": "Volunteer Unit A",
         "lat": 15.8340,
         "lon": 78.0560,
     },
     {
-        "id": 7,
+        "id": 12,
         "name": "D.Kasim",
         "age": 67,
         "gender": "Male",
         "clothes": "white blue shirt",
+        "city": "kurnool",
         "last_seen_location": "maha nandhi",
         "status": "CLOSED",
-        "created_at": "3 days ago",
+        "created_at": "5 days ago",
         "assigned_team": "Helping Hands NGO",
         "lat": 15.8100,
         "lon": 78.0600,
@@ -154,6 +406,7 @@ INITIAL_TEAMS = [
         "id": 1,
         "name": "Helping Hands NGO",
         "org": "NGO",
+        "city": "kurnool",
         "base_location": "Budhwarpet Base",
         "lat": 15.8350,
         "lon": 78.0450,
@@ -166,6 +419,7 @@ INITIAL_TEAMS = [
         "id": 2,
         "name": "City Police Patrol 1",
         "org": "Police",
+        "city": "kurnool",
         "base_location": "Kurnool Town Police Station",
         "lat": 15.8281,
         "lon": 78.0373,
@@ -178,12 +432,91 @@ INITIAL_TEAMS = [
         "id": 3,
         "name": "Volunteer Unit A",
         "org": "Volunteer",
+        "city": "kurnool",
         "base_location": "Nandyal Road Base",
         "lat": 15.8100,
         "lon": 78.0600,
         "phone": "91234-56789",
         "username": "volunteer_a",
         "password": "volunteer123",
+        "available": True,
+    },
+    {
+        "id": 4,
+        "name": "Hyderabad Disaster Quick Response Team",
+        "org": "Disaster Relief",
+        "city": "hyderabad",
+        "base_location": "HITEC City Rapid Outpost",
+        "lat": 17.4450,
+        "lon": 78.3750,
+        "phone": "98480-11223",
+        "username": "hyd_disaster",
+        "password": "hyd123",
+        "available": True,
+    },
+    {
+        "id": 5,
+        "name": "Bengaluru Red Cross Unit",
+        "org": "NGO",
+        "city": "bengaluru",
+        "base_location": "Koramangala Station Base",
+        "lat": 12.9360,
+        "lon": 77.6200,
+        "phone": "98860-33445",
+        "username": "blr_redcross",
+        "password": "blr123",
+        "available": True,
+    },
+    {
+        "id": 6,
+        "name": "Coastal Rescue Force",
+        "org": "Volunteer",
+        "city": "visakhapatnam",
+        "base_location": "Beach Patrol Outpost",
+        "lat": 17.7150,
+        "lon": 83.3200,
+        "phone": "94400-55667",
+        "username": "coastal_rescue",
+        "password": "vizag123",
+        "available": True,
+    },
+    {
+        "id": 7,
+        "name": "Amaravati Emergency Corps",
+        "org": "Police",
+        "city": "vijayawada",
+        "base_location": "PNBS Central Outpost",
+        "lat": 16.5150,
+        "lon": 80.6220,
+        "phone": "98490-77889",
+        "username": "amaravati_corps",
+        "password": "vja123",
+        "available": True,
+    },
+    {
+        "id": 8,
+        "name": "Tirumala Pilgrim Assistance Patrol",
+        "org": "Disaster Relief",
+        "city": "tirupati",
+        "base_location": "Alipiri Footpath Command",
+        "lat": 13.6500,
+        "lon": 79.3900,
+        "phone": "97000-99001",
+        "username": "tpt_patrol",
+        "password": "tpt123",
+        "available": True,
+    },
+    {
+        "id": 9,
+        "name": "Nandyal Volunteer Search Group",
+        "org": "Volunteer",
+        "city": "nandyal",
+        "base_location": "Clock Tower Outpost",
+        "lat": 15.4800,
+        "lon": 78.4850,
+        "phone": "96180-22334",
+        "username": "nandyal_volunteers",
+        "password": "ndl123",
         "available": True,
     },
 ]
@@ -450,6 +783,86 @@ def _calculate_shortest_route(from_lat: float, from_lon: float, to_lat: float, t
         "route_coordinates": street_coords,
         "street_coordinates": street_coords,
         "engine": engine,
+    }
+
+
+
+def _infer_city_from_coords_or_name(name: str, lat: float | None = None, lon: float | None = None) -> str:
+    """Helper to detect city from camera/location name or geographic distance."""
+    name_lower = (name or "").lower()
+    for cam_name, cam_data in CAMERA_LOCATIONS.items():
+        if cam_name.lower() in name_lower or name_lower in cam_name.lower():
+            return cam_data.get("city", "kurnool")
+
+    for city_id, city_info in CITIES.items():
+        if city_id in name_lower or city_info["name"].lower() in name_lower:
+            return city_id
+
+    if lat is not None and lon is not None:
+        best_city = "kurnool"
+        best_dist = float("inf")
+        for city_id, city_info in CITIES.items():
+            dist = GeoPoint(lat, lon).distance_to(GeoPoint(city_info["lat"], city_info["lon"]))
+            if dist < best_dist:
+                best_dist = dist
+                best_city = city_id
+        return best_city
+
+    return "kurnool"
+
+
+def _get_city_graph_data(city_id: str | int = "kurnool", top_k: int = 5, speed: float | None = None) -> dict:
+    if isinstance(city_id, int):
+        top_k = city_id
+        city_id = "kurnool"
+    """Generate Dijkstra reachability and decaying random-walk zones for any requested city."""
+    city_id = (city_id or "kurnool").lower()
+    city_info = CITIES.get(city_id, CITIES["kurnool"])
+
+    city_cameras = {
+        name: loc for name, loc in CAMERA_LOCATIONS.items()
+        if loc.get("city", "kurnool").lower() == city_id
+    }
+    if not city_cameras:
+        city_cameras = {name: loc for name, loc in CAMERA_LOCATIONS.items() if loc.get("city") == "kurnool"}
+
+    graph = SightingGraph()
+    loc_objects = []
+    for i, (name, loc_data) in enumerate(city_cameras.items(), start=1):
+        loc_obj = Location(id=i, name=name, point=GeoPoint(loc_data["lat"], loc_data["lon"]))
+        graph.add_location(loc_obj)
+        loc_objects.append((i, name, loc_data["lat"], loc_data["lon"], loc_obj))
+
+    graph.connect_nearby(max_km=30.0)
+
+    city_cases = [c for c in APP_STATE["cases"] if c.get("city", "kurnool").lower() == city_id and c.get("status") == "ACTIVE"]
+    if not city_cases:
+        city_cases = [c for c in APP_STATE["cases"] if c.get("city", "kurnool").lower() == city_id]
+
+    case_name = city_cases[0]["name"] if city_cases else "Target Subject"
+    case_age = city_cases[0].get("age", 22) if city_cases else 22
+    case_loc_name = city_cases[0].get("last_seen_location") if city_cases else loc_objects[0][1]
+
+    sighting_loc = next((obj for _, name, _, _, obj in loc_objects if name.lower() == case_loc_name.lower()), loc_objects[0][4])
+
+    from datetime import timedelta
+    now = datetime.now()
+    # 130 min gives multi-hop search zones in dense metropolitan environments
+    s = Sighting(person_id=1, location=sighting_loc, timestamp=now - timedelta(minutes=130))
+    person = Person(id=1, name=case_name, age=case_age, gender="Male", clothes="Reported Attire", sightings=[s])
+
+    from .zones import SearchZoneAnalyzer, zones_to_geojson
+    analyzer = SearchZoneAnalyzer(graph)
+    reach = analyzer.reach_km(person, now, speed_kmph=speed)
+    zones = analyzer.analyze(person, now=now, top_k=top_k, speed_kmph=speed)
+
+    return {
+        "city": city_info,
+        "person": {"name": person.name, "age": person.age, "last_seen": sighting_loc.name},
+        "reach_km": reach,
+        "all_locations": [{"id": i, "name": name, "lat": lat, "lon": lon} for i, name, lat, lon, _ in loc_objects],
+        "zones": [z.to_dict() for z in zones],
+        "geojson": json.loads(zones_to_geojson(zones)),
     }
 
 
@@ -866,7 +1279,7 @@ HTML_APP = """<!DOCTYPE html>
     }
 
     .container {
-      max-width: 1400px;
+      max-width: 1440px;
       width: 100%;
       margin: 1.5rem auto;
       padding: 0 1.25rem;
@@ -968,6 +1381,99 @@ HTML_APP = """<!DOCTYPE html>
     .stat-box.box-closed .stat-icon { background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.25); }
     .stat-box.box-teams .stat-icon { background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.25); }
 
+    /* CITY SELECTOR TOOLBAR */
+    .city-selector-bar {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 0.75rem 1.15rem;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.85rem;
+      box-shadow: var(--shadow);
+    }
+
+    .city-pills {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      flex-wrap: wrap;
+      flex: 1;
+    }
+
+    .city-pill {
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 0.35rem 0.75rem;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: all 0.2s ease;
+    }
+
+    .city-pill:hover {
+      color: var(--text);
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+
+    .city-pill.active {
+      background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+      color: #fff;
+      border-color: var(--accent);
+      box-shadow: 0 4px 12px var(--accent-glow);
+    }
+
+    .city-select-box {
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      padding: 0.45rem 0.85rem;
+      border-radius: 8px;
+      font-size: 0.84rem;
+      font-weight: 700;
+    }
+
+    /* MAP LAYER SELECTOR */
+    .map-layer-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
+
+    .layer-btn {
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 0.25rem 0.55rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .layer-btn:hover {
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    .layer-btn.active {
+      background: var(--card-solid);
+      color: var(--accent);
+      border-color: var(--accent);
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+
     /* PORTAL TABS */
     .tab-bar {
       display: flex;
@@ -1044,8 +1550,28 @@ HTML_APP = """<!DOCTYPE html>
       letter-spacing: -0.01em;
     }
 
+    /* LEAFLET CONTAINER & TACTICAL DARK MODE TILE FIX */
+    .leaflet-container {
+      background: #0b1120 !important;
+      font-family: var(--font-main) !important;
+    }
+
+    .leaflet-container * {
+      box-sizing: content-box;
+      transition: none !important;
+    }
+
+    .leaflet-tile {
+      max-width: none !important;
+    }
+
+    /* Fail-Safe Tactical Military Dark Mode Filter */
+    [data-theme="dark"] .leaflet-tile.dark-invert {
+      filter: brightness(0.65) invert(1) contrast(2.5) hue-rotate(200deg) saturate(0.35) brightness(0.75);
+    }
+
     #admin-map, #ngo-map {
-      height: 460px;
+      height: 480px;
       border-radius: 12px;
       border: 1px solid var(--card-border);
       z-index: 1;
@@ -1480,6 +2006,11 @@ HTML_APP = """<!DOCTYPE html>
         </p>
         <form onsubmit="handleCreateCase(event)">
           <div class="form-group">
+            <label for="new-city">Jurisdiction City / Region *</label>
+            <select id="new-city" onchange="handleNewCaseCityChange()" required>
+            </select>
+          </div>
+          <div class="form-group">
             <label for="new-name">Full Name *</label>
             <input type="text" id="new-name" placeholder="e.g. Ramesh Kumar" required />
           </div>
@@ -1502,8 +2033,9 @@ HTML_APP = """<!DOCTYPE html>
             <input type="text" id="new-clothes" placeholder="e.g. Yellow t-shirt, blue jeans, cap" />
           </div>
           <div class="form-group">
-            <label for="new-loc">Last Seen Location *</label>
-            <input type="text" id="new-loc" placeholder="e.g. CAR STAND" required />
+            <label for="new-loc">Last Seen Location / Sighting Node *</label>
+            <select id="new-loc" required>
+            </select>
           </div>
           <div class="form-group">
             <label for="new-team">Assigned Response Unit (NGO / Team)</label>
@@ -1527,8 +2059,13 @@ HTML_APP = """<!DOCTYPE html>
         </p>
         <form onsubmit="handleCreateNgo(event)">
           <div class="form-group">
+            <label for="ngo-city">Base City / Region *</label>
+            <select id="ngo-city" onchange="handleNgoCityChange()" required>
+            </select>
+          </div>
+          <div class="form-group">
             <label for="ngo-name">NGO / Team Name *</label>
-            <input type="text" id="ngo-name" placeholder="e.g. Red Cross Kurnool Chapter" required />
+            <input type="text" id="ngo-name" placeholder="e.g. Red Cross Chapter" required />
           </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
             <div class="form-group">
@@ -1548,18 +2085,11 @@ HTML_APP = """<!DOCTYPE html>
           <div class="form-group">
             <label for="ngo-base-preset">Base Location Area</label>
             <select id="ngo-base-preset" onchange="handleNgoBasePresetChange()">
-              <option value="Budhwarpet Base|15.8350|78.0450">Budhwarpet Base (15.8350, 78.0450)</option>
-              <option value="Kurnool Town Base|15.8281|78.0373">Kurnool Town Base (15.8281, 78.0373)</option>
-              <option value="Nandyal Road Base|15.8100|78.0600">Nandyal Road Base (15.8100, 78.0600)</option>
-              <option value="Collectorate Base|15.8200|78.0450">Collectorate Base (15.8200, 78.0450)</option>
-              <option value="Railway Station Outpost|15.8310|78.0420">Railway Station Outpost (15.8310, 78.0420)</option>
-              <option value="Tungabhadra North Base|15.8420|78.0300">Tungabhadra North Base (15.8420, 78.0300)</option>
-              <option value="custom">-- Custom Location & Coordinates --</option>
             </select>
           </div>
           <div class="form-group">
             <label for="ngo-base-name">Base Location Label *</label>
-            <input type="text" id="ngo-base-name" value="Budhwarpet Base" required />
+            <input type="text" id="ngo-base-name" value="Central Base Outpost" required />
           </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
             <div class="form-group">
@@ -1576,7 +2106,7 @@ HTML_APP = """<!DOCTYPE html>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
               <div class="form-group" style="margin-bottom: 0;">
                 <label for="ngo-username">Login Username *</label>
-                <input type="text" id="ngo-username" placeholder="e.g. redcross_kurnool" required />
+                <input type="text" id="ngo-username" placeholder="e.g. team_unit" required />
               </div>
               <div class="form-group" style="margin-bottom: 0;">
                 <label for="ngo-password">Login Password *</label>
@@ -1676,7 +2206,7 @@ HTML_APP = """<!DOCTYPE html>
         </div>
         <div class="brand-meta">
           <span class="pulse-dot"></span>
-          <span>SYSTEM ONLINE &bull; Graph Sighting Network &bull; Live ArcFace CCTV &bull; Turn-by-Turn OSRM</span>
+          <span>SYSTEM ONLINE &bull; Multi-City Sighting Network &bull; Live ArcFace CCTV &bull; Turn-by-Turn OSRM</span>
         </div>
       </div>
       <div class="nav-actions">
@@ -1740,6 +2270,25 @@ HTML_APP = """<!DOCTYPE html>
         </div>
       </div>
 
+      <!-- MULTI-CITY JURISDICTION SELECTOR BAR -->
+      <div class="city-selector-bar">
+        <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+          <span style="font-size: 1.15rem;">🏙️</span>
+          <span style="font-weight: 800; font-size: 0.88rem; color: var(--text);">Surveillance Jurisdiction:</span>
+          <span class="badge" style="background: var(--accent); color: #000; font-weight: 800;" id="active-city-badge">KURNOOL</span>
+        </div>
+
+        <div class="city-pills" id="city-pills-list">
+          <!-- Dynamically populated -->
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <select id="city-select-dropdown" onchange="switchCity(this.value)" class="city-select-box">
+            <!-- Dynamically populated -->
+          </select>
+        </div>
+      </div>
+
       <!-- Portal Tabs -->
       <div class="tab-bar" id="portal-tab-bar">
         <button class="tab-btn active" id="tab-admin" onclick="switchView('admin')">👮 Admin Command Center</button>
@@ -1767,20 +2316,6 @@ HTML_APP = """<!DOCTYPE html>
                 📹 Select Surveillance Camera Location:
               </label>
               <select id="video-camera-loc" style="width: 100%; background: var(--card); border: 1px solid var(--card-border); color: var(--text); padding: 0.55rem 0.75rem; border-radius: 8px; font-size: 0.88rem;">
-                <option value="CAR STAND">CAM-01: CAR STAND (15.8281, 78.0373)</option>
-                <option value="Budhwarpet Market">CAM-02: Budhwarpet Market Junction (15.8350, 78.0450)</option>
-                <option value="Kurnool City Railway">CAM-03: Kurnool City Railway Station (15.8310, 78.0420)</option>
-                <option value="Kurnool Bus Stand">CAM-04: Central Bus Stand Entrance (15.8281, 78.0373)</option>
-                <option value="RGM grounds">CAM-05: RGM Grounds North Field (15.8310, 78.0420)</option>
-                <option value="cantene">CAM-06: Campus Canteen Surveillance (15.8350, 78.0450)</option>
-                <option value="DS labs">CAM-07: DS Labs Corridor (15.8200, 78.0450)</option>
-                <option value="RGM hostel">CAM-08: RGM Hostel Gate (15.8150, 78.0300)</option>
-                <option value="RGM gardens">CAM-09: RGM Gardens Perimeter (15.8340, 78.0560)</option>
-                <option value="Konda Reddy Fort">CAM-10: Konda Reddy Fort Circle (15.8340, 78.0560)</option>
-                <option value="maha nandhi">CAM-11: Maha Nandhi Road Junction (15.8100, 78.0600)</option>
-                <option value="Collectorate">CAM-12: District Collectorate (15.8200, 78.0450)</option>
-                <option value="Government Hospital">CAM-13: Government General Hospital (15.8150, 78.0300)</option>
-                <option value="Tungabhadra Bridge">CAM-14: Tungabhadra River Bridge (15.8420, 78.0300)</option>
               </select>
             </div>
 
@@ -1828,30 +2363,36 @@ HTML_APP = """<!DOCTYPE html>
             </div>
           </div>
 
-          <!-- Sighting Graph & Search Zones Map -->
+          <!-- Sighting Graph & Search Zones Map with Layer Switcher -->
           <div class="card">
             <div class="card-header">
               <div class="card-title">🗺️ Sighting Graph & Search Zone Perimeter</div>
-              <span class="reg-id">Kurnool Network &bull; Dijkstra</span>
+              <div class="map-layer-bar">
+                <button class="layer-btn active" id="btn-layer-tactical_dark" onclick="setMapLayer('tactical_dark')">🌙 Dark HUD</button>
+                <button class="layer-btn" id="btn-layer-carto_dark" onclick="setMapLayer('carto_dark')">🏙️ Carto</button>
+                <button class="layer-btn" id="btn-layer-osm_light" onclick="setMapLayer('osm_light')">☀️ Street</button>
+                <button class="layer-btn" id="btn-layer-satellite" onclick="setMapLayer('satellite')">🛰️ Satellite</button>
+              </div>
             </div>
             <div id="admin-map"></div>
           </div>
         </div>
 
-        <!-- Case Registry with Add Case & Delete Resolved Options -->
+        <!-- Case Registry with City Filter, Add Case & Delete Resolved Options -->
         <div class="card" style="margin-bottom: 1.5rem;">
           <div class="card-header">
             <div class="card-title">📁 Registered Missing Persons Database</div>
             <button class="btn btn-success btn-sm" onclick="openAddCaseModal()">+ Enroll New Case</button>
           </div>
 
-          <!-- Search & Filter Bar -->
+          <!-- Search & Filter Bar with City Scope -->
           <div class="filter-bar">
-            <input type="text" class="search-input" id="case-search-input" placeholder="🔍 Search by name, clothes, location..." oninput="handleSearchCases(event)">
-            <div style="display: flex; gap: 0.45rem;">
-              <button class="btn btn-secondary btn-sm" onclick="filterCases('ALL')" id="filter-all">All Cases</button>
+            <input type="text" class="search-input" id="case-search-input" placeholder="🔍 Search by name, city, clothes, location..." oninput="handleSearchCases(event)">
+            <div style="display: flex; gap: 0.45rem; flex-wrap: wrap;">
+              <button class="btn btn-secondary btn-sm" onclick="filterCases('ALL')" id="filter-all">All Status</button>
               <button class="btn btn-secondary btn-sm" onclick="filterCases('ACTIVE')" id="filter-active">Active</button>
               <button class="btn btn-secondary btn-sm" onclick="filterCases('RESOLVED')" id="filter-resolved">Resolved</button>
+              <button class="btn btn-secondary btn-sm" onclick="toggleCityCaseFilter()" id="filter-city-scope">Current City Only</button>
             </div>
           </div>
 
@@ -1861,6 +2402,7 @@ HTML_APP = """<!DOCTYPE html>
                 <tr>
                   <th>ID</th>
                   <th>Name</th>
+                  <th>City / Region</th>
                   <th>Age / Gender</th>
                   <th>Clothing Description</th>
                   <th>Last Seen Location</th>
@@ -1870,7 +2412,7 @@ HTML_APP = """<!DOCTYPE html>
                 </tr>
               </thead>
               <tbody id="cases-table">
-                <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading database cases...</td></tr>
+                <tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading database cases...</td></tr>
               </tbody>
             </table>
           </div>
@@ -1883,7 +2425,7 @@ HTML_APP = """<!DOCTYPE html>
             <button class="btn btn-success btn-sm" onclick="openAddNgoModal()">+ Register New NGO</button>
           </div>
           <div style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 1.15rem;">
-            Manage authorized partner rescue teams, their base station coordinates, and their separate login credentials:
+            Manage authorized partner rescue teams, their base station coordinates, and their separate login credentials across all jurisdictions:
           </div>
           <div class="table-container">
             <table>
@@ -1891,6 +2433,7 @@ HTML_APP = """<!DOCTYPE html>
                 <tr>
                   <th>ID</th>
                   <th>Team / NGO Name</th>
+                  <th>City</th>
                   <th>Type</th>
                   <th>Base Station Location</th>
                   <th>Coordinates (Lat, Lon)</th>
@@ -1900,7 +2443,7 @@ HTML_APP = """<!DOCTYPE html>
                 </tr>
               </thead>
               <tbody id="teams-table">
-                <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading registered teams...</td></tr>
+                <tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading registered teams...</td></tr>
               </tbody>
             </table>
           </div>
@@ -2038,9 +2581,12 @@ HTML_APP = """<!DOCTYPE html>
   <div id="toast-msg"></div>
 
   <script>
+    let allCities = [];
+    let currentCity = 'kurnool';
     let allCases = [];
     let allTeams = [];
     let currentFilter = 'ALL';
+    let filterOnlyCurrentCity = false;
     let searchQuery = '';
     let currentRole = 'admin';
     let loggedInRole = null;
@@ -2051,6 +2597,57 @@ HTML_APP = """<!DOCTYPE html>
     let ngoLayers = null;
     let adminTileLayer = null;
     let ngoTileLayer = null;
+
+    // TILE PROVIDERS & FAIL-SAFE DARK MODE TILE LOGIC
+    const MAP_PROVIDERS = {
+      tactical_dark: {
+        name: "Tactical Dark HUD",
+        url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        options: { maxZoom: 19, attribution: "&copy; OpenStreetMap" },
+        className: "dark-invert"
+      },
+      carto_dark: {
+        name: "Carto DarkMatter",
+        url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+        options: { maxZoom: 19, subdomains: "abcd", attribution: "&copy; CARTO &copy; OpenStreetMap" },
+        className: ""
+      },
+      osm_light: {
+        name: "Standard Street (OSM)",
+        url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        options: { maxZoom: 19, attribution: "&copy; OpenStreetMap" },
+        className: ""
+      },
+      satellite: {
+        name: "Satellite Imagery (Esri)",
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        options: { maxZoom: 19, attribution: "&copy; Esri World Imagery" },
+        className: ""
+      }
+    };
+    let currentMapLayerKey = "tactical_dark";
+
+    function setMapLayer(layerKey) {
+      if (!MAP_PROVIDERS[layerKey]) return;
+      currentMapLayerKey = layerKey;
+      const prov = MAP_PROVIDERS[layerKey];
+
+      // Update button active state
+      document.querySelectorAll('.layer-btn').forEach(b => {
+        b.classList.toggle('active', b.id === `btn-layer-${layerKey}`);
+      });
+
+      // Update tile layers on both maps
+      if (adminTileLayer && adminMap) {
+        adminMap.removeLayer(adminTileLayer);
+        adminTileLayer = L.tileLayer(prov.url, { ...prov.options, className: prov.className }).addTo(adminMap);
+      }
+      if (ngoTileLayer && ngoMap) {
+        ngoMap.removeLayer(ngoTileLayer);
+        ngoTileLayer = L.tileLayer(prov.url, { ...prov.options, className: prov.className }).addTo(ngoMap);
+      }
+      showToast(`Map style: ${prov.name}`);
+    }
 
     // LIVE DIGITAL CLOCK
     function updateClock() {
@@ -2087,8 +2684,11 @@ HTML_APP = """<!DOCTYPE html>
         if (disp) disp.innerText = `Search Party: ${teamName}`;
 
         currentRole = 'ngo';
+        if (loggedInTeam && loggedInTeam.city) {
+          switchCity(loggedInTeam.city, false);
+        }
         loadNgoRoute();
-        setTimeout(() => ngoMap && ngoMap.invalidateSize(), 200);
+        resizeMaps();
       } else {
         if (tabAdmin) {
           tabAdmin.style.display = 'inline-block';
@@ -2107,20 +2707,15 @@ HTML_APP = """<!DOCTYPE html>
 
         currentRole = 'admin';
         loadNotifications();
-        setTimeout(() => adminMap && adminMap.invalidateSize(), 200);
+        resizeMaps();
       }
     }
 
-    // THEME HANDLING (DARK / LIGHT) & DYNAMIC MAP TILES
-    function getTileUrl(theme) {
-      return theme === 'dark' 
-        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-    }
-
+    // THEME HANDLING (DARK / LIGHT)
     function initTheme() {
       const saved = localStorage.getItem('mptracker_theme') || 'dark';
       document.documentElement.setAttribute('data-theme', saved);
+      currentMapLayerKey = saved === 'dark' ? 'tactical_dark' : 'osm_light';
     }
 
     function toggleTheme() {
@@ -2128,12 +2723,10 @@ HTML_APP = """<!DOCTYPE html>
       const next = cur === 'dark' ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', next);
       localStorage.setItem('mptracker_theme', next);
+      
+      const newLayerKey = next === 'dark' ? 'tactical_dark' : 'osm_light';
+      setMapLayer(newLayerKey);
       showToast(`Switched to ${next.toUpperCase()} mode`);
-
-      // Update map tiles dynamically
-      const tileUrl = getTileUrl(next);
-      if (adminTileLayer) adminTileLayer.setUrl(tileUrl);
-      if (ngoTileLayer) ngoTileLayer.setUrl(tileUrl);
     }
 
     // TOAST NOTIFICATION
@@ -2142,6 +2735,181 @@ HTML_APP = """<!DOCTYPE html>
       t.innerText = msg;
       t.style.display = 'block';
       setTimeout(() => { t.style.display = 'none'; }, 2800);
+    }
+
+    // RESIZE OBSERVER ON MAPS
+    function resizeMaps() {
+      setTimeout(() => {
+        if (adminMap) adminMap.invalidateSize(true);
+        if (ngoMap) ngoMap.invalidateSize(true);
+      }, 150);
+    }
+
+    // MAP INITIALIZATION
+    function initMaps() {
+      const prov = MAP_PROVIDERS[currentMapLayerKey];
+
+      if (!adminMap) {
+        adminMap = L.map('admin-map').setView([15.8281, 78.0373], 14);
+        adminTileLayer = L.tileLayer(prov.url, { ...prov.options, className: prov.className }).addTo(adminMap);
+        adminLayers = L.layerGroup().addTo(adminMap);
+      }
+      if (!ngoMap) {
+        ngoMap = L.map('ngo-map').setView([15.8320, 78.0440], 14);
+        ngoTileLayer = L.tileLayer(prov.url, { ...prov.options, className: prov.className }).addTo(ngoMap);
+        ngoLayers = L.layerGroup().addTo(ngoMap);
+      }
+
+      if (window.ResizeObserver) {
+        const ro = new ResizeObserver(() => {
+          if (adminMap) adminMap.invalidateSize();
+          if (ngoMap) ngoMap.invalidateSize();
+        });
+        const m1 = document.getElementById('admin-map');
+        const m2 = document.getElementById('ngo-map');
+        if (m1) ro.observe(m1);
+        if (m2) ro.observe(m2);
+      }
+    }
+
+    // MULTI-CITY LOADING & SWITCHING
+    async function loadCities() {
+      try {
+        const res = await fetch('/api/cities');
+        allCities = await res.json();
+        renderCityPills();
+        populateCityDropdowns();
+      } catch (e) {
+        console.error("Failed to load cities", e);
+      }
+    }
+
+    function renderCityPills() {
+      const container = document.getElementById('city-pills-list');
+      if (!container) return;
+      container.innerHTML = '';
+
+      allCities.forEach(c => {
+        const btn = document.createElement('button');
+        btn.className = `city-pill ${c.id === currentCity ? 'active' : ''}`;
+        btn.dataset.city = c.id;
+        btn.innerText = c.name;
+        btn.onclick = () => switchCity(c.id);
+        container.appendChild(btn);
+      });
+    }
+
+    function populateCityDropdowns() {
+      const sel = document.getElementById('city-select-dropdown');
+      const addCaseCitySel = document.getElementById('new-city');
+      const addNgoCitySel = document.getElementById('ngo-city');
+
+      [sel, addCaseCitySel, addNgoCitySel].forEach(dropdown => {
+        if (!dropdown) return;
+        dropdown.innerHTML = '';
+        allCities.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.innerText = `${c.name} (${c.state})`;
+          if (c.id === currentCity) opt.selected = true;
+          dropdown.appendChild(opt);
+        });
+      });
+    }
+
+    function switchCity(cityId, shouldToast = true) {
+      cityId = (cityId || 'kurnool').toLowerCase();
+      currentCity = cityId;
+      const city = allCities.find(c => c.id === cityId) || { name: "Kurnool", state: "Andhra Pradesh", lat: 15.8281, lon: 78.0373, zoom: 14 };
+
+      // Update active pills & dropdowns
+      document.querySelectorAll('.city-pill').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.city === cityId);
+      });
+      const badge = document.getElementById('active-city-badge');
+      if (badge) badge.innerText = city.name.toUpperCase();
+      const dropdown = document.getElementById('city-select-dropdown');
+      if (dropdown) dropdown.value = cityId;
+
+      // Pan & fly map
+      if (adminMap) {
+        adminMap.flyTo([city.lat, city.lon], city.zoom || 13, { duration: 1.2 });
+      }
+
+      // Reload cameras & search zones for this city
+      loadMapData(cityId);
+      populateVideoCameraDropdown(cityId);
+      populateAddCaseLocationDropdown(cityId);
+      populateNgoBasePresetDropdown(cityId);
+      renderCasesTable();
+      resizeMaps();
+
+      if (shouldToast) {
+        showToast(`Switched city to ${city.name} (${city.state || ''})`);
+      }
+    }
+
+    async function populateVideoCameraDropdown(cityId) {
+      try {
+        const res = await fetch(`/api/cameras?city=${cityId}`);
+        const cams = await res.json();
+        const sel = document.getElementById('video-camera-loc');
+        if (!sel) return;
+        sel.innerHTML = '';
+        Object.entries(cams).forEach(([name, data]) => {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.innerText = data.label || name;
+          sel.appendChild(opt);
+        });
+      } catch (e) { console.error(e); }
+    }
+
+    function handleNewCaseCityChange() {
+      const cityId = document.getElementById('new-city').value;
+      populateAddCaseLocationDropdown(cityId);
+    }
+
+    async function populateAddCaseLocationDropdown(cityId) {
+      try {
+        const res = await fetch(`/api/cameras?city=${cityId}`);
+        const cams = await res.json();
+        const sel = document.getElementById('new-loc');
+        if (!sel) return;
+        sel.innerHTML = '';
+        Object.entries(cams).forEach(([name, data]) => {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.innerText = `${name} (${data.lat.toFixed(4)}, ${data.lon.toFixed(4)})`;
+          sel.appendChild(opt);
+        });
+      } catch (e) { console.error(e); }
+    }
+
+    function handleNgoCityChange() {
+      const cityId = document.getElementById('ngo-city').value;
+      populateNgoBasePresetDropdown(cityId);
+    }
+
+    async function populateNgoBasePresetDropdown(cityId) {
+      try {
+        const res = await fetch(`/api/cameras?city=${cityId}`);
+        const cams = await res.json();
+        const sel = document.getElementById('ngo-base-preset');
+        if (!sel) return;
+        sel.innerHTML = '';
+        Object.entries(cams).forEach(([name, data]) => {
+          const opt = document.createElement('option');
+          opt.value = `${name} Base|${data.lat}|${data.lon}`;
+          opt.innerText = `${name} Base (${data.lat.toFixed(4)}, ${data.lon.toFixed(4)})`;
+          sel.appendChild(opt);
+        });
+        const customOpt = document.createElement('option');
+        customOpt.value = 'custom';
+        customOpt.innerText = '-- Custom Coordinates --';
+        sel.appendChild(customOpt);
+        handleNgoBasePresetChange();
+      } catch (e) { console.error(e); }
     }
 
     // AUTHENTICATION & LOGIN PAGE
@@ -2172,7 +2940,7 @@ HTML_APP = """<!DOCTYPE html>
       allTeams.forEach(t => {
         const opt = document.createElement('option');
         opt.value = t.id;
-        opt.innerText = `${t.name} (${t.base_location})`;
+        opt.innerText = `${t.name} (${t.base_location} - ${(t.city || 'kurnool').toUpperCase()})`;
         sel.appendChild(opt);
       });
       if (allTeams.length > 0) {
@@ -2222,6 +2990,7 @@ HTML_APP = """<!DOCTYPE html>
         applyRolePermissions(loggedInRole);
         const nameDisplay = loggedInTeam ? loggedInTeam.name : 'Police Command';
         showToast(`Authenticated as ${nameDisplay}`);
+        resizeMaps();
       } catch (err) {
         console.error(err);
       }
@@ -2258,23 +3027,7 @@ HTML_APP = """<!DOCTYPE html>
         document.getElementById('screen-login').style.display = 'none';
         document.getElementById('screen-app').style.display = 'flex';
         applyRolePermissions(loggedInRole);
-      }
-    }
-
-    // MAP INITIALIZATION WITH DYNAMIC THEME TILES
-    function initMaps() {
-      const theme = document.documentElement.getAttribute('data-theme') || 'dark';
-      const tileUrl = getTileUrl(theme);
-
-      if (!adminMap) {
-        adminMap = L.map('admin-map').setView([15.828, 78.045], 14);
-        adminTileLayer = L.tileLayer(tileUrl, { maxZoom: 19, attribution: '&copy; CARTO &copy; OpenStreetMap' }).addTo(adminMap);
-        adminLayers = L.layerGroup().addTo(adminMap);
-      }
-      if (!ngoMap) {
-        ngoMap = L.map('ngo-map').setView([15.832, 78.044], 14);
-        ngoTileLayer = L.tileLayer(tileUrl, { maxZoom: 19, attribution: '&copy; CARTO &copy; OpenStreetMap' }).addTo(ngoMap);
-        ngoLayers = L.layerGroup().addTo(ngoMap);
+        resizeMaps();
       }
     }
 
@@ -2309,10 +3062,12 @@ HTML_APP = """<!DOCTYPE html>
 
       allTeams.forEach(t => {
         const tr = document.createElement('tr');
+        const cityUpper = (t.city || 'kurnool').toUpperCase();
         tr.innerHTML = `
           <td class="mono" style="color: var(--accent);">#${t.id}</td>
           <td style="font-weight: 800; color: var(--text);">${t.name}</td>
-          <td><span class="badge" style="background: #0284c7;">${t.org}</span></td>
+          <td><span class="badge" style="background:#0284c7;">${cityUpper}</span></td>
+          <td><span class="badge" style="background: #10b981;">${t.org}</span></td>
           <td><b>${t.base_location}</b></td>
           <td class="mono" style="color: var(--text-muted);">${t.lat.toFixed(4)}, ${t.lon.toFixed(4)}</td>
           <td class="mono">${t.phone}</td>
@@ -2332,7 +3087,7 @@ HTML_APP = """<!DOCTYPE html>
       allTeams.forEach(t => {
         const opt = document.createElement('option');
         opt.value = t.name;
-        opt.innerText = `${t.name} (${t.base_location})`;
+        opt.innerText = `${t.name} (${t.base_location} - ${(t.city || 'kurnool').toUpperCase()})`;
         sel.appendChild(opt);
       });
     }
@@ -2346,8 +3101,19 @@ HTML_APP = """<!DOCTYPE html>
       } catch (e) { console.error(e); }
     }
 
+    function toggleCityCaseFilter() {
+      filterOnlyCurrentCity = !filterOnlyCurrentCity;
+      const btn = document.getElementById('filter-city-scope');
+      if (btn) {
+        btn.className = `btn btn-sm ${filterOnlyCurrentCity ? 'btn' : 'btn-secondary'}`;
+        btn.innerText = filterOnlyCurrentCity ? `City: ${currentCity.toUpperCase()}` : 'Current City Only';
+      }
+      renderCasesTable();
+    }
+
     function renderCasesTable() {
       const tbody = document.getElementById('cases-table');
+      if (!tbody) return;
       tbody.innerHTML = '';
       
       const filtered = allCases.filter(c => {
@@ -2356,16 +3122,23 @@ HTML_APP = """<!DOCTYPE html>
                               (currentFilter === 'RESOLVED' && (c.status === 'RESCUED' || c.status === 'CLOSED'));
         
         if (!matchesFilter) return false;
+
+        if (filterOnlyCurrentCity) {
+          const caseCity = (c.city || 'kurnool').toLowerCase();
+          if (caseCity !== currentCity.toLowerCase()) return false;
+        }
+
         if (!searchQuery) return true;
 
         const q = searchQuery.toLowerCase();
         return c.name.toLowerCase().includes(q) ||
+               ((c.city || '').toLowerCase().includes(q)) ||
                (c.clothes && c.clothes.toLowerCase().includes(q)) ||
                (c.last_seen_location && c.last_seen_location.toLowerCase().includes(q));
       });
 
       if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:2rem;">No matching cases found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; color:var(--text-muted); padding:2rem;">No matching cases found.</td></tr>`;
         return;
       }
 
@@ -2373,6 +3146,7 @@ HTML_APP = """<!DOCTYPE html>
         const tr = document.createElement('tr');
         const statusClass = c.status === 'ACTIVE' ? 'tag-active' : (c.status === 'RESCUED' ? 'tag-rescued' : 'tag-closed');
         const statusPulse = c.status === 'ACTIVE' ? '<span class="pulse-dot" style="background:var(--warning); box-shadow:0 0 8px var(--warning); margin-right:4px;"></span>' : '';
+        const cityTag = (c.city || 'kurnool').toUpperCase();
         
         let actionButtons = '';
         if (loggedInRole === 'admin') {
@@ -2398,6 +3172,7 @@ HTML_APP = """<!DOCTYPE html>
         tr.innerHTML = `
           <td class="mono" style="color: var(--accent);">#${c.id}</td>
           <td style="font-weight: 800; color: var(--text);">${c.name}</td>
+          <td><span class="badge" style="background:#3b82f6;">${cityTag}</span></td>
           <td>${c.age} / ${c.gender}</td>
           <td style="color: var(--text-muted);">${c.clothes || 'Standard'}</td>
           <td><b>${c.last_seen_location}</b></td>
@@ -2424,11 +3199,12 @@ HTML_APP = """<!DOCTYPE html>
 
     function populateNgoCaseSelector() {
       const sel = document.getElementById('resolve-case-id');
+      if (!sel) return;
       sel.innerHTML = '';
       allCases.forEach(c => {
         const opt = document.createElement('option');
         opt.value = c.id;
-        opt.innerText = `Case #${c.id}: ${c.name} (${c.status} - ${c.last_seen_location})`;
+        opt.innerText = `Case #${c.id}: ${c.name} (${(c.city || 'kurnool').toUpperCase()} - ${c.status} - ${c.last_seen_location})`;
         sel.appendChild(opt);
       });
       updateNgoSelection();
@@ -2447,17 +3223,19 @@ HTML_APP = """<!DOCTYPE html>
       }
     }
 
-    async function loadMapData() {
+    // MULTI-CITY GRAPH & SEARCH ZONE LOADER
+    async function loadMapData(cityId = null) {
       initMaps();
+      const targetCity = cityId || currentCity || 'kurnool';
       try {
-        const res = await fetch('/api/demo?top=5');
+        const res = await fetch(`/api/demo?city=${targetCity}&top=5`);
         const data = await res.json();
         adminLayers.clearLayers();
 
         data.all_locations.forEach(loc => {
           L.circleMarker([loc.lat, loc.lon], {
             radius: 6, color: '#38bdf8', fillColor: '#08101e', fillOpacity: 0.9, weight: 2
-          }).bindPopup(`<b>${loc.name}</b><br><span style="color:#38bdf8;">Surveillance Node</span>`).addTo(adminLayers);
+          }).bindPopup(`<b>${loc.name}</b><br><span style="color:#38bdf8;">Surveillance Node (${targetCity.toUpperCase()})</span>`).addTo(adminLayers);
         });
 
         const colors = ['#ef4444', '#f59e0b', '#3b82f6', '#10b981', '#a855f7'];
@@ -2471,10 +3249,12 @@ HTML_APP = """<!DOCTYPE html>
             radius: 8, color: color, fillColor: color, fillOpacity: 0.95, weight: 2
           }).addTo(adminLayers);
         });
+
+        resizeMaps();
       } catch (e) { console.error(e); }
     }
 
-    // STREET-LEVEL ROAD ROUTING FROM SPECIFIC LOGGED-IN NGO'S BASE
+    // STREET-LEVEL ROAD ROUTING FOR SPECIFIC TEAM & CASE
     async function loadNgoRoute(caseId = null) {
       initMaps();
       try {
@@ -2513,12 +3293,12 @@ HTML_APP = """<!DOCTYPE html>
         const coordsCount = data.street_coordinates ? data.street_coordinates.length : (data.route_coordinates ? data.route_coordinates.length : 2);
         document.getElementById('route-path-text').innerText = `Street route tracing through ${coordsCount} road nodes from ${baseName} to ${locName}`;
 
-        // Search party base marker
+        // Base marker
         L.circleMarker([startLat, startLon], {
           radius: 10, color: '#10b981', fillColor: '#10b981', fillOpacity: 0.95, weight: 3
         }).bindPopup(`<b>${teamName} (Base)</b><br>${baseName}`).addTo(ngoLayers);
 
-        // Target sighting location marker
+        // Target sighting marker
         L.circleMarker([targetLat, targetLon], {
           radius: 10, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.95, weight: 3
         }).bindPopup(`<b>Target Sighting: ${personName}</b><br>${locName}`).addTo(ngoLayers);
@@ -2529,7 +3309,6 @@ HTML_APP = """<!DOCTYPE html>
 
         const streetCoordinates = data.street_coordinates || data.route_coordinates || [[startLat, startLon], [targetLat, targetLon]];
 
-        // Draw dual-layer professional GPS road navigation polyline
         const casingPoly = L.polyline(streetCoordinates, {
           color: '#0369a1',
           weight: 9,
@@ -2547,6 +3326,7 @@ HTML_APP = """<!DOCTYPE html>
         }).addTo(ngoLayers);
 
         ngoMap.fitBounds(casingPoly.getBounds(), { padding: [45, 45] });
+        resizeMaps();
 
       } catch (e) {
         console.error("Failed to load street route", e);
@@ -2556,7 +3336,6 @@ HTML_APP = """<!DOCTYPE html>
     function switchView(role) {
       if (loggedInRole === 'ngo' && role === 'admin') {
         showToast('⚠️ Access Denied: Admin Command Center is restricted to Police Command.');
-        console.warn('Unauthorized attempt by NGO login to access Admin view.');
         return;
       }
       currentRole = role;
@@ -2571,14 +3350,14 @@ HTML_APP = """<!DOCTYPE html>
         dot.className = 'dot role-admin';
         disp.innerText = 'Admin: Police Command';
         loadNotifications();
-        setTimeout(() => adminMap && adminMap.invalidateSize(), 200);
+        resizeMaps();
       } else {
         dot.className = 'dot role-ngo';
         const teamName = loggedInTeam ? loggedInTeam.name : 'Helping Hands NGO';
         disp.innerText = `Search Party: ${teamName}`;
         loadNgoRoute();
         loadNotifications();
-        setTimeout(() => ngoMap && ngoMap.invalidateSize(), 200);
+        resizeMaps();
       }
     }
 
@@ -2763,7 +3542,7 @@ HTML_APP = """<!DOCTYPE html>
       if (!c) return;
       document.getElementById('allot-case-id').value = c.id;
       document.getElementById('allot-case-title').innerText = `Case #${c.id}: ${c.name} (${c.age} / ${c.gender})`;
-      document.getElementById('allot-case-loc').innerText = `Target Location: ${c.last_seen_location} • Current Unit: ${c.assigned_team}`;
+      document.getElementById('allot-case-loc').innerText = `Target: ${c.last_seen_location} • Region: ${(c.city || 'kurnool').toUpperCase()}`;
       document.getElementById('allot-instructions').value = '';
 
       const sel = document.getElementById('allot-team-select');
@@ -2771,7 +3550,7 @@ HTML_APP = """<!DOCTYPE html>
       allTeams.forEach(t => {
         const opt = document.createElement('option');
         opt.value = t.id;
-        opt.innerText = `${t.name} (${t.base_location}) - Phone: ${t.phone}`;
+        opt.innerText = `${t.name} (${t.base_location} - ${(t.city || 'kurnool').toUpperCase()}) - ${t.phone}`;
         if (t.name === c.assigned_team) opt.selected = true;
         sel.appendChild(opt);
       });
@@ -2815,6 +3594,9 @@ HTML_APP = """<!DOCTYPE html>
         showToast('⚠️ Access Denied: Only Police Command can enroll new cases.');
         return;
       }
+      const citySel = document.getElementById('new-city');
+      if (citySel) citySel.value = currentCity;
+      populateAddCaseLocationDropdown(currentCity);
       document.getElementById('add-case-modal').style.display = 'flex';
     }
     function closeAddCaseModal() { document.getElementById('add-case-modal').style.display = 'none'; }
@@ -2824,6 +3606,9 @@ HTML_APP = """<!DOCTYPE html>
         showToast('⚠️ Access Denied: Only Police Command can register new NGOs.');
         return;
       }
+      const citySel = document.getElementById('ngo-city');
+      if (citySel) citySel.value = currentCity;
+      populateNgoBasePresetDropdown(currentCity);
       document.getElementById('add-ngo-modal').style.display = 'flex';
     }
     function closeAddNgoModal() { document.getElementById('add-ngo-modal').style.display = 'none'; }
@@ -2843,9 +3628,11 @@ HTML_APP = """<!DOCTYPE html>
         showToast('⚠️ Access Denied: Only Police Command can register new NGOs.');
         return;
       }
+      const cityId = document.getElementById('ngo-city').value;
       const newTeam = {
         name: document.getElementById('ngo-name').value.trim(),
         org: document.getElementById('ngo-org').value,
+        city: cityId,
         phone: document.getElementById('ngo-phone').value.trim(),
         base_location: document.getElementById('ngo-base-name').value.trim(),
         lat: parseFloat(document.getElementById('ngo-lat').value),
@@ -2863,7 +3650,7 @@ HTML_APP = """<!DOCTYPE html>
         const saved = await res.json();
         closeAddNgoModal();
         e.target.reset();
-        showToast(`NGO Registered: ${saved.name}`);
+        showToast(`NGO Registered: ${saved.name} (${cityId.toUpperCase()})`);
         loadTeams();
         loadStats();
       } catch (err) { console.error(err); }
@@ -2893,8 +3680,10 @@ HTML_APP = """<!DOCTYPE html>
         showToast('⚠️ Access Denied: Only Police Command can enroll new cases.');
         return;
       }
+      const cityId = document.getElementById('new-city').value;
       const newCase = {
         name: document.getElementById('new-name').value,
+        city: cityId,
         age: parseInt(document.getElementById('new-age').value),
         gender: document.getElementById('new-gender').value,
         clothes: document.getElementById('new-clothes').value,
@@ -2910,7 +3699,7 @@ HTML_APP = """<!DOCTYPE html>
         });
         closeAddCaseModal();
         e.target.reset();
-        showToast(`Case enrolled for ${newCase.name}`);
+        showToast(`Case enrolled for ${newCase.name} (${cityId.toUpperCase()})`);
         loadStats();
         loadCases();
       } catch (err) { console.error(err); }
@@ -3005,19 +3794,21 @@ HTML_APP = """<!DOCTYPE html>
       radar.style.display = 'block';
       radar.style.animation = 'radarSweep 2s infinite linear';
       status.style.display = 'block';
-      status.innerText = `Scanning video frames recorded at ${selectedCamKey} using DeepFace ArcFace...`;
+      status.innerText = `Scanning video frames recorded at ${selectedCamKey} (${currentCity.toUpperCase()}) using DeepFace ArcFace...`;
 
       setTimeout(async () => {
         radar.style.display = 'none';
         status.innerText = `Scan complete. Confirmed match identified at ${selectedCamKey}.`;
         matchBox.style.display = 'block';
 
-        const matchPerson = allCases.length > 0 ? allCases[0].name : "N.K.SYAM";
-        const matchCaseId = allCases.length > 0 ? allCases[0].id : 1;
+        const cityCases = allCases.filter(c => (c.city || 'kurnool').toLowerCase() === currentCity.toLowerCase());
+        const matchCase = cityCases.length > 0 ? cityCases[0] : (allCases.length > 0 ? allCases[0] : { name: "N.K.SYAM", id: 1 });
+        const matchPerson = matchCase.name;
+        const matchCaseId = matchCase.id;
         const targetTeamName = loggedInTeam ? loggedInTeam.name : (allTeams.length > 0 ? allTeams[0].name : "Helping Hands NGO");
 
         document.getElementById('match-details').innerHTML = `
-          <div>Person: <b style="color:var(--text);">${matchPerson}</b> (Case #${matchCaseId})</div>
+          <div>Person: <b style="color:var(--text);">${matchPerson}</b> (Case #${matchCaseId}) &bull; Jurisdiction: <b>${currentCity.toUpperCase()}</b></div>
           <div>Camera Location: <b>${selectedCamText}</b></div>
           <div>Detection Timestamp: <b>00:04.2s (Frame 105)</b> &bull; Cosine Dist: <b style="color:var(--success);">0.28</b></div>
           <div style="margin-top:0.35rem; color:var(--accent);">Auto-Dispatch: Nearest team <b>${targetTeamName}</b> mobilized to <b>${selectedCamKey}</b> via road navigation.</div>
@@ -3026,7 +3817,7 @@ HTML_APP = """<!DOCTYPE html>
         await fetch('/api/scan', {
           method: 'POST',
           headers: {'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin'},
-          body: JSON.stringify({ camera_location: selectedCamKey, case_id: matchCaseId, person_name: matchPerson })
+          body: JSON.stringify({ camera_location: selectedCamKey, case_id: matchCaseId, person_name: matchPerson, city: currentCity })
         });
 
         // Draw tactical bounding box on overlay canvas
@@ -3044,16 +3835,11 @@ HTML_APP = """<!DOCTYPE html>
         const boxH = canvas.height * 0.35;
         ctx.strokeRect(boxX, boxY, boxW, boxH);
         
-        // Target corner reticles
         ctx.lineWidth = 5;
         ctx.beginPath();
-        // Top-left
         ctx.moveTo(boxX, boxY + 15); ctx.lineTo(boxX, boxY); ctx.lineTo(boxX + 15, boxY);
-        // Top-right
         ctx.moveTo(boxX + boxW - 15, boxY); ctx.lineTo(boxX + boxW, boxY); ctx.lineTo(boxX + boxW, boxY + 15);
-        // Bottom-left
         ctx.moveTo(boxX, boxY + boxH - 15); ctx.lineTo(boxX, boxY + boxH); ctx.lineTo(boxX + 15, boxY + boxH);
-        // Bottom-right
         ctx.moveTo(boxX + boxW - 15, boxY + boxH); ctx.lineTo(boxX + boxW, boxY + boxH); ctx.lineTo(boxX + boxW, boxY + boxH - 15);
         ctx.stroke();
 
@@ -3061,22 +3847,24 @@ HTML_APP = """<!DOCTYPE html>
         ctx.font = 'bold 13px sans-serif';
         ctx.fillText(`TARGET: ${matchPerson} @ ${selectedCamKey}`, boxX, boxY - 8);
 
-        showToast(`Match detected: ${matchPerson}`);
+        showToast(`Match detected: ${matchPerson} (${currentCity.toUpperCase()})`);
         loadStats();
         loadCases();
       }, 2500);
     }
 
-    window.addEventListener('DOMContentLoaded', () => {
+    window.addEventListener('DOMContentLoaded', async () => {
       initTheme();
       initMaps();
-      loadTeams();
-      loadStats();
-      loadCases();
-      loadMapData();
+      await loadCities();
+      await loadTeams();
+      await loadStats();
+      await loadCases();
+      switchCity(currentCity, false);
       loadNotifications();
       restoreSession();
       setInterval(loadNotifications, 8000);
+      resizeMaps();
     });
   </script>
 </body>
@@ -3157,9 +3945,23 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             self._send_json(route)
             return
 
+        if path == "/api/cities":
+            self._send_json(list(CITIES.values()))
+            return
+
+        if path == "/api/cameras":
+            city_filter = query.get("city", [""])[0].lower()
+            if city_filter:
+                cams = {k: v for k, v in CAMERA_LOCATIONS.items() if v.get("city", "kurnool").lower() == city_filter}
+            else:
+                cams = CAMERA_LOCATIONS
+            self._send_json(cams)
+            return
+
         if path == "/api/demo":
+            city = query.get("city", ["kurnool"])[0].lower()
             top_k = int(query.get("top", [5])[0]) if "top" in query else 5
-            data = _get_demo_data(top_k=top_k)
+            data = _get_city_graph_data(city_id=city, top_k=top_k)
             self._send_json(data)
             return
 
@@ -3458,19 +4260,11 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
         self._send_json({"error": "Not Found"}, status=404)
 
 
-def _get_demo_data(top_k: int = 5, speed: float | None = None) -> dict:
-    from .zones import SearchZoneAnalyzer, zones_to_geojson
-    graph, person, now = build_demo()
-    analyzer = SearchZoneAnalyzer(graph)
-    reach = analyzer.reach_km(person, now, speed_kmph=speed)
-    zones = analyzer.analyze(person, now=now, top_k=top_k, speed_kmph=speed)
-    return {
-        "person": {"name": person.name},
-        "reach_km": reach,
-        "all_locations": [{"id": i, "name": name, "lat": lat, "lon": lon} for i, name, lat, lon in PLACES],
-        "zones": [z.to_dict() for z in zones],
-        "geojson": json.loads(zones_to_geojson(zones)),
-    }
+def _get_demo_data(city_id: str | int = "kurnool", top_k: int = 5, speed: float | None = None) -> dict:
+    if isinstance(city_id, int):
+        top_k = city_id
+        city_id = "kurnool"
+    return _get_city_graph_data(city_id=city_id, top_k=top_k, speed=speed)
 
 
 def run_server(host: str = "0.0.0.0", port: int = 10000) -> None:
