@@ -433,30 +433,23 @@ def ensure_db_schema(settings: Optional[Settings] = None) -> bool:
                     (cname, clat, clon),
                 )
 
-            # Ensure all seed teams exist across all cities
-            for t in DEFAULT_SEED_TEAMS:
-                cur.execute("SELECT id FROM rescue_teams WHERE name=%s LIMIT 1", (t["name"],))
-                existing_team = cur.fetchone()
-                if not existing_team:
+            # Check if rescue_teams has ANY records; seed ONLY if table is completely empty
+            cur.execute("SELECT COUNT(*) FROM rescue_teams")
+            team_count = cur.fetchone()[0]
+            if team_count == 0:
+                for t in DEFAULT_SEED_TEAMS:
                     cur.execute(
                         """INSERT INTO rescue_teams
                            (name, organization_type, contact_phone, city, current_location_name, latitude, longitude, is_available, username, password, email)
                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                         (t["name"], t["org"], t["phone"], t["city"], t["base_location"], t["lat"], t["lon"], t["available"], t["username"], t["password"], t.get("email", "")),
                     )
-                else:
-                    cur.execute(
-                        """UPDATE rescue_teams
-                           SET city=%s, organization_type=%s, username=COALESCE(username, %s), password=COALESCE(password, %s), email=COALESCE(email, %s)
-                           WHERE id=%s""",
-                        (t["city"], t["org"], t["username"], t["password"], t.get("email", ""), existing_team[0]),
-                    )
 
-            # Ensure all seed cases exist across all cities
-            for c in DEFAULT_SEED_CASES:
-                cur.execute("SELECT id FROM missing_persons WHERE name=%s LIMIT 1", (c["name"],))
-                existing_case = cur.fetchone()
-                if not existing_case:
+            # Check if missing_persons has ANY records; seed ONLY if table is completely empty
+            cur.execute("SELECT COUNT(*) FROM missing_persons")
+            case_count = cur.fetchone()[0]
+            if case_count == 0:
+                for c in DEFAULT_SEED_CASES:
                     cur.execute(
                         """INSERT INTO missing_persons
                            (name, age, gender, clothes_description, city, last_seen_location, case_status, last_seen_latitude, last_seen_longitude)
@@ -471,27 +464,6 @@ def ensure_db_schema(settings: Optional[Settings] = None) -> bool:
                             "INSERT INTO case_assignments (missing_person_id, rescue_team_id, status) VALUES (%s, %s, 'ACTIVE')",
                             (new_pid, t_row[0]),
                         )
-                else:
-                    cur.execute(
-                        """UPDATE missing_persons
-                           SET city=%s, last_seen_latitude=COALESCE(last_seen_latitude, %s), last_seen_longitude=COALESCE(last_seen_longitude, %s)
-                           WHERE id=%s""",
-                        (c["city"], c["lat"], c["lon"], existing_case[0]),
-                    )
-
-            # Auto-infer city for any cases where city is NULL or defaulted incorrectly
-            cur.execute("SELECT id, name, last_seen_location, city FROM missing_persons")
-            for pid, pname, ploc, pcity in cur.fetchall():
-                inferred = _infer_city(ploc or pname or "")
-                if pcity is None or (pcity == "kurnool" and inferred != "kurnool"):
-                    cur.execute("UPDATE missing_persons SET city=%s WHERE id=%s", (inferred, pid))
-
-            # Auto-infer city for any rescue teams where city is NULL
-            cur.execute("SELECT id, name, current_location_name, city FROM rescue_teams")
-            for tid, tname, tloc, tcity in cur.fetchall():
-                inferred = _infer_city(tname or tloc or "")
-                if tcity is None:
-                    cur.execute("UPDATE rescue_teams SET city=%s WHERE id=%s", (inferred, tid))
 
             conn.commit()
         conn.close()
@@ -545,11 +517,10 @@ def load_cases_from_db(settings: Optional[Settings] = None) -> List[Dict[str, An
                     "phone": phone or "",
                 })
         conn.close()
-        if cases:
-            return cases
+        return cases
     except Exception as exc:
-        print(f"[!] load_cases_from_db fallback to memory: {exc}")
-    return list(DEFAULT_SEED_CASES)
+        print(f"[!] load_cases_from_db connection failure: {exc}")
+        return list(DEFAULT_SEED_CASES)
 
 
 def save_case_to_db(case: Dict[str, Any], settings: Optional[Settings] = None) -> Dict[str, Any]:
@@ -601,6 +572,101 @@ def save_case_to_db(case: Dict[str, Any], settings: Optional[Settings] = None) -
     except Exception as exc:
         print(f"[!] save_case_to_db warning: {exc}")
         return case
+
+
+def update_case_in_db(case_id: int, updates: Dict[str, Any], settings: Optional[Settings] = None) -> Optional[Dict[str, Any]]:
+    """Update any fields of a missing person case in PostgreSQL and sync dispatches/assignments."""
+    try:
+        conn = connect(settings, vector=False)
+        with conn, conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, name, age, gender, clothes_description, city,
+                       last_seen_location, case_status, last_seen_latitude,
+                       last_seen_longitude, photo_path, contact_phone
+                FROM missing_persons WHERE id=%s
+            """, (case_id,))
+            row = cur.fetchone()
+            if not row:
+                conn.close()
+                return None
+
+            name = updates.get("name", row[1])
+            name = str(name).strip() if name else "Unnamed Case"
+            age = int(updates.get("age", row[2] or 25))
+            gender = updates.get("gender", row[3] or "Unknown")
+            clothes = str(updates.get("clothes", row[4] or "")).strip()
+            city = str(updates.get("city", row[5] or "kurnool")).strip().lower()
+            last_seen = str(updates.get("last_seen_location", row[6] or "CAR STAND")).strip()
+            status = str(updates.get("status", row[7] or "ACTIVE")).strip().upper()
+            lat = float(updates.get("lat", row[8] or 15.8281))
+            lon = float(updates.get("lon", row[9] or 78.0373))
+            photo = str(updates.get("photo_path", row[10] or ""))
+            phone = str(updates.get("phone", row[11] or ""))
+
+            cur.execute(
+                """UPDATE missing_persons
+                   SET name=%s, age=%s, gender=%s, clothes_description=%s, city=%s,
+                       last_seen_location=%s, case_status=%s, last_seen_latitude=%s,
+                       last_seen_longitude=%s, photo_path=%s, contact_phone=%s
+                   WHERE id=%s""",
+                (name, age, gender, clothes, city, last_seen, status, lat, lon, photo, phone, case_id),
+            )
+
+            assigned_team = updates.get("assigned_team")
+            if assigned_team:
+                cur.execute("SELECT id FROM rescue_teams WHERE name=%s LIMIT 1", (assigned_team,))
+                t_row = cur.fetchone()
+                if t_row:
+                    cur.execute(
+                        """INSERT INTO case_assignments (missing_person_id, rescue_team_id, status)
+                           VALUES (%s, %s, 'ACTIVE')
+                           ON CONFLICT DO NOTHING""",
+                        (case_id, t_row[0]),
+                    )
+                    cur.execute(
+                        """UPDATE case_assignments
+                           SET rescue_team_id=%s, status='ACTIVE'
+                           WHERE id = (SELECT id FROM case_assignments WHERE missing_person_id=%s ORDER BY id DESC LIMIT 1)""",
+                        (t_row[0], case_id),
+                    )
+
+            if status == "ACTIVE":
+                cur.execute(
+                    """UPDATE rescue_dispatches
+                       SET status='EN_ROUTE', resolved_at=NULL
+                       WHERE missing_person_id=%s""",
+                    (case_id,),
+                )
+            elif status in ("RESCUED", "CLOSED"):
+                d_status = "VERIFIED_FOUND" if status == "RESCUED" else "NOT_FOUND"
+                cur.execute(
+                    """UPDATE rescue_dispatches
+                       SET status=%s, resolved_at=CURRENT_TIMESTAMP
+                       WHERE missing_person_id=%s""",
+                    (d_status, case_id),
+                )
+
+            conn.commit()
+        conn.close()
+        print(f"[+] Case #{case_id} ({name}, {city.upper()}) successfully updated in PostgreSQL.")
+        return {
+            "id": case_id,
+            "name": name,
+            "age": age,
+            "gender": gender,
+            "clothes": clothes,
+            "city": city,
+            "last_seen_location": last_seen,
+            "status": status,
+            "lat": lat,
+            "lon": lon,
+            "photo_path": photo,
+            "phone": phone,
+            "assigned_team": assigned_team or "Helping Hands NGO",
+        }
+    except Exception as exc:
+        print(f"[!] update_case_in_db warning: {exc}")
+        return None
 
 
 def update_case_status_in_db(case_id: int, status: str, notes: str = "", settings: Optional[Settings] = None) -> bool:
@@ -687,11 +753,10 @@ def load_teams_from_db(settings: Optional[Settings] = None) -> List[Dict[str, An
                     "password": pwd or "ngo123",
                 })
         conn.close()
-        if teams:
-            return teams
+        return teams
     except Exception as exc:
-        print(f"[!] load_teams_from_db fallback to memory: {exc}")
-    return list(DEFAULT_SEED_TEAMS)
+        print(f"[!] load_teams_from_db connection failure: {exc}")
+        return list(DEFAULT_SEED_TEAMS)
 
 
 def save_team_to_db(team: Dict[str, Any], settings: Optional[Settings] = None) -> Dict[str, Any]:

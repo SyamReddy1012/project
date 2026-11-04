@@ -25,6 +25,7 @@ from .db import (
     ensure_db_schema,
     load_cases_from_db,
     save_case_to_db,
+    update_case_in_db,
     delete_case_from_db,
     update_case_status_in_db,
     load_teams_from_db,
@@ -601,13 +602,13 @@ def _sync_db_with_state() -> None:
     try:
         ensure_db_schema()
         db_cases = load_cases_from_db()
-        if db_cases:
+        if db_cases is not None:
             APP_STATE["cases"] = db_cases
         db_teams = load_teams_from_db()
-        if db_teams:
+        if db_teams is not None:
             APP_STATE["teams"] = db_teams
         db_dispatches = load_dispatches_from_db()
-        if db_dispatches:
+        if db_dispatches is not None:
             APP_STATE["dispatches"] = db_dispatches
     except Exception as exc:
         print(f"[!] PostgreSQL sync warning: {exc}")
@@ -2106,6 +2107,109 @@ HTML_APP = """<!DOCTYPE html>
       </div>
     </div>
 
+    
+    <!-- Edit Case Modal -->
+    <div id="edit-case-modal" class="modal-backdrop" style="display: none;">
+      <div class="modal-box" style="max-width: 580px; max-height: 90vh; overflow-y: auto;">
+        <h2>?? Edit Missing Person Case</h2>
+        <p style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 1.2rem;">
+          Update jurisdiction city, case status, clothing, location, and responder assignment. Changes persist directly in PostgreSQL.
+        </p>
+        <form onsubmit="handleSaveEditCase(event)">
+          <input type="hidden" id="edit-case-id" />
+
+          <div class="form-group" style="margin-bottom: 1.15rem;">
+            <label>Case Photo / Facial Recognition Snapshot</label>
+            <div style="display: flex; gap: 1rem; align-items: center; background: var(--input-bg); border: 2px dashed rgba(59, 130, 246, 0.35); border-radius: 12px; padding: 0.75rem;">
+              <div id="edit-photo-preview-box" style="width: 60px; height: 60px; border-radius: 50%; overflow: hidden; background: #0f172a; border: 2px solid var(--accent); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <span id="edit-photo-placeholder" style="font-size: 1.8rem;">??</span>
+                <img id="edit-photo-preview-img" src="" style="width: 100%; height: 100%; object-fit: cover; display: none;" />
+              </div>
+              <div style="flex: 1;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('edit-photo-input').click()">?? Change Photo...</button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="clearEditCasePhoto()">? Clear</button>
+              </div>
+              <input type="file" id="edit-photo-input" accept="image/*" onchange="handleEditPhotoUpload(event)" style="display: none;" />
+              <input type="hidden" id="edit-photo-base64" value="" />
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+            <div class="form-group">
+              <label for="edit-city">Jurisdiction City / Region *</label>
+              <select id="edit-city" onchange="handleEditCaseCityChange()" required>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="edit-status">Case Status *</label>
+              <select id="edit-status" required>
+                <option value="ACTIVE">?? ACTIVE (Under Investigation)</option>
+                <option value="RESCUED">? RESCUED (Found & Safe)</option>
+                <option value="CLOSED">?? CLOSED (Investigation Closed)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="edit-name">Full Name *</label>
+            <input type="text" id="edit-name" required />
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+            <div class="form-group">
+              <label for="edit-age">Age *</label>
+              <input type="number" id="edit-age" required />
+            </div>
+            <div class="form-group">
+              <label for="edit-gender">Gender</label>
+              <select id="edit-gender">
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="edit-clothes">Clothing & Description *</label>
+            <input type="text" id="edit-clothes" required />
+          </div>
+
+          <div class="form-group">
+            <label for="edit-loc">Last Seen Location / Landmark Node *</label>
+            <select id="edit-loc" onchange="handleEditCaseLocationChange()" required></select>
+            <input type="text" id="edit-custom-loc" placeholder="Custom Landmark Name" style="display: none; margin-top: 0.5rem; width: 100%;" />
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+            <div class="form-group">
+              <label for="edit-lat">Latitude *</label>
+              <input type="number" step="0.0001" id="edit-lat" required />
+            </div>
+            <div class="form-group">
+              <label for="edit-lon">Longitude *</label>
+              <input type="number" step="0.0001" id="edit-lon" required />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="edit-team">Assigned Response Unit (NGO / Team) *</label>
+            <select id="edit-team" required></select>
+          </div>
+
+          <div class="form-group">
+            <label for="edit-phone">Contact Phone</label>
+            <input type="text" id="edit-phone" />
+          </div>
+
+          <div style="display: flex; gap: 0.85rem; margin-top: 1.45rem;">
+            <button type="button" class="btn btn-secondary" onclick="closeEditCaseModal()" style="flex: 1;">Cancel</button>
+            <button type="submit" class="btn btn-success" style="flex: 2;">Save Changes to Database</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Add NGO / Rescue Team Modal -->
     <div id="add-ngo-modal" class="modal-backdrop" style="display: none;">
       <div class="modal-box">
@@ -3339,7 +3443,11 @@ HTML_APP = """<!DOCTYPE html>
         tr.innerHTML = `
           <td class="mono" style="color: var(--accent);">#${c.id}</td>
           <td style="font-weight: 800; color: var(--text); display: flex; align-items: center;">${photoThumb} <span>${c.name}</span></td>
-          <td><span class="badge" style="background:#3b82f6;">${cityTag}</span></td>
+          <td>
+            <select onchange="updateCaseCity(${c.id}, this.value)" title="Change jurisdiction city in PostgreSQL" style="background: rgba(2,132,199,0.2); border: 1px solid rgba(2,132,199,0.5); color: #38bdf8; padding: 3px 5px; border-radius: 6px; font-size: 0.76rem; font-weight: 700; cursor: pointer;">
+              ${allCities.map(ct => `<option value="${ct.id}" ${ct.id === (c.city || 'kurnool').toLowerCase() ? 'selected' : ''}>${ct.name.toUpperCase()}</option>`).join('')}
+            </select>
+          </td>
           <td>${c.age} / ${c.gender}</td>
           <td style="color: var(--text-muted);">${c.clothes || 'Standard'}</td>
           <td><b>${c.last_seen_location}</b></td>
@@ -4075,14 +4183,14 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
 
         if path == "/api/teams":
             db_teams = load_teams_from_db()
-            if db_teams:
+            if db_teams is not None:
                 APP_STATE["teams"] = db_teams
             self._send_json(APP_STATE["teams"])
             return
 
         if path == "/api/cases":
             db_cases = load_cases_from_db()
-            if db_cases:
+            if db_cases is not None:
                 APP_STATE["cases"] = db_cases
             self._send_json(APP_STATE["cases"])
             return
@@ -4461,6 +4569,44 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
                 elif not nid and not team_id:
                     n["read"] = True
             self._send_json({"status": "success"})
+            return
+
+        if parsed.path == "/api/cases/update":
+            cid = int(body.get("id", 0) or body.get("case_id", 0))
+            if not cid:
+                self._send_json({"error": "Missing case id"}, status=400)
+                return
+
+            photo_data = body.get("photo_data", "")
+            if photo_data and photo_data.startswith("data:image"):
+                try:
+                    header, encoded = photo_data.split(",", 1)
+                    img_bytes = base64.b64decode(encoded)
+                    os.makedirs("uploads", exist_ok=True)
+                    clean_name = re.sub(r'[^a-zA-Z0-9_]', '', body.get("name", "person").lower())
+                    filename = f"person_{int(time.time())}_{clean_name}.jpg"
+                    filepath = os.path.join("uploads", filename)
+                    with open(filepath, "wb") as f:
+                        f.write(img_bytes)
+                    body["photo_path"] = f"/uploads/{filename}"
+                except Exception as exc:
+                    print(f"[!] Photo update decode warning: {exc}")
+
+            updated_case = update_case_in_db(cid, body)
+            if not updated_case:
+                self._send_json({"error": "Case not found"}, status=404)
+                return
+
+            for c in APP_STATE["cases"]:
+                if c["id"] == cid:
+                    c.update(updated_case)
+                    break
+
+            self._send_json({
+                "status": "success",
+                "message": f"Case #{cid} ({updated_case['name']}) updated in PostgreSQL database.",
+                "case": updated_case,
+            })
             return
 
         if parsed.path == "/api/cases/status":
