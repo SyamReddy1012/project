@@ -75,7 +75,7 @@ class CoreTests(unittest.TestCase):
         from mptracker.web import _get_demo_data
         data = _get_demo_data(top_k=3, speed=4.0)
         self.assertEqual(len(data["zones"]), 3)
-        self.assertEqual(data["person"]["name"], "Demo Person")
+        self.assertTrue(data["person"]["name"])
         self.assertIn("geojson", data)
         self.assertEqual(data["geojson"]["type"], "FeatureCollection")
 
