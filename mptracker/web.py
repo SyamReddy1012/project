@@ -22,6 +22,8 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .db import (
+    verify_password,
+    hash_password,
     ensure_db_schema,
     load_cases_from_db,
     save_case_to_db,
@@ -861,11 +863,34 @@ def _get_city_graph_data(city_id: str | int = "kurnool", top_k: int = 5, speed: 
     reach = analyzer.reach_km(person, now, speed_kmph=speed)
     zones = analyzer.analyze(person, now=now, top_k=top_k, speed_kmph=speed)
 
+    edges_list = []
+    seen_edges = set()
+    for u, neighbors in graph._adj.items():
+        for v, edge in neighbors.items():
+            pair = tuple(sorted((u, v)))
+            if pair not in seen_edges:
+                seen_edges.add(pair)
+                loc_u = graph.location(u)
+                loc_v = graph.location(v)
+                edges_list.append({
+                    "from_id": u,
+                    "from_name": loc_u.name,
+                    "from_lat": loc_u.point.lat,
+                    "from_lon": loc_u.point.lon,
+                    "to_id": v,
+                    "to_name": loc_v.name,
+                    "to_lat": loc_v.point.lat,
+                    "to_lon": loc_v.point.lon,
+                    "distance_km": round(edge.distance_km, 2),
+                    "traversals": edge.traversals,
+                })
+
     return {
         "city": city_info,
         "person": {"name": person.name, "age": person.age, "last_seen": sighting_loc.name},
         "reach_km": reach,
         "all_locations": [{"id": i, "name": name, "lat": lat, "lon": lon} for i, name, lat, lon, _ in loc_objects],
+        "edges": edges_list,
         "zones": [z.to_dict() for z in zones],
         "geojson": json.loads(zones_to_geojson(zones)),
     }
@@ -888,6 +913,40 @@ HTML_APP = """<!DOCTYPE html>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
+
+    /* SAR DOSSIER & MISSING PERSON FLYER PRINT STYLES */
+    @media print {
+      body * {
+        visibility: hidden !important;
+      }
+      #flyer-modal, #flyer-modal * {
+        visibility: visible !important;
+      }
+      #flyer-modal {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        background: #ffffff !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        backdrop-filter: none !important;
+      }
+      .flyer-sheet {
+        box-shadow: none !important;
+        border: 2px solid #000000 !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        border-radius: 0 !important;
+        padding: 1.5rem !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
     :root {
       --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       --font-mono: 'JetBrains Mono', monospace;
@@ -2108,6 +2167,99 @@ HTML_APP = """<!DOCTYPE html>
     </div>
 
     
+    
+    <!-- Official SAR Dossier / Missing Person Flyer Modal -->
+    <div id="flyer-modal" class="modal-backdrop" style="display: none;">
+      <div class="modal-box flyer-sheet" style="max-width: 720px; max-height: 92vh; overflow-y: auto; background: #0f172a; border: 2px solid var(--accent); color: var(--text);">
+        <!-- Official Header -->
+        <div style="border-bottom: 2px solid rgba(56, 189, 248, 0.4); padding-bottom: 0.85rem; margin-bottom: 1.15rem; text-align: center;">
+          <div style="font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); font-weight: 800;">
+            POLICE EMERGENCY SEARCH AND RESCUE NOTICE &bull; PROBLEM STATEMENT 112
+          </div>
+          <h1 style="font-size: 1.6rem; font-weight: 900; margin: 0.35rem 0 0.15rem; color: #ef4444; letter-spacing: 0.04em;">
+            🚨 MISSING PERSON IDENTIFICATION FLYER
+          </h1>
+          <div style="font-size: 0.78rem; color: var(--text-muted);">
+            Regd: <b style="color:var(--text);">25091A32M7, 25091A3222</b> &bull; Rapid Multi-Agency Sighting & Response Network
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 180px 1fr; gap: 1.25rem; align-items: start; margin-bottom: 1.25rem;">
+          <!-- Photo Box -->
+          <div style="text-align: center;">
+            <div id="flyer-photo-container" style="width: 180px; height: 210px; border: 3px solid #ef4444; border-radius: 8px; overflow: hidden; background: #08101e; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);">
+              <img id="flyer-photo-img" src="" style="width: 100%; height: 100%; object-fit: cover; display: none;" />
+              <div id="flyer-photo-placeholder" style="font-size: 4rem; color: var(--text-muted);">👤</div>
+            </div>
+            <div style="margin-top: 0.5rem; font-size: 0.72rem; color: #10b981; font-weight: 700; text-transform: uppercase;">
+              ✓ DeepFace Biometric Enrolled
+            </div>
+          </div>
+
+          <!-- Person Data Grid -->
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <h2 id="flyer-name" style="margin: 0; font-size: 1.45rem; color: var(--text); font-weight: 800;">Target Subject</h2>
+              <span id="flyer-status-badge" class="badge" style="background: #ef4444; font-size: 0.78rem;">ACTIVE SEARCH</span>
+            </div>
+
+            <table style="width: 100%; font-size: 0.86rem; border-collapse: collapse; margin-top: 0.4rem;">
+              <tr style="border-bottom: 1px solid var(--card-border);">
+                <td style="padding: 0.35rem 0; color: var(--text-muted); font-weight: 600; width: 38%;">Case ID:</td>
+                <td id="flyer-case-id" style="padding: 0.35rem 0; font-weight: 700; color: var(--accent);" class="mono">#1</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--card-border);">
+                <td style="padding: 0.35rem 0; color: var(--text-muted); font-weight: 600;">Age & Gender:</td>
+                <td id="flyer-age-gender" style="padding: 0.35rem 0; font-weight: 700;">22 Years / Male</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--card-border);">
+                <td style="padding: 0.35rem 0; color: var(--text-muted); font-weight: 600;">Jurisdiction City:</td>
+                <td id="flyer-city" style="padding: 0.35rem 0; font-weight: 700; text-transform: uppercase; color: #f59e0b;">KURNOOL</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--card-border);">
+                <td style="padding: 0.35rem 0; color: var(--text-muted); font-weight: 600;">Last Known Location:</td>
+                <td id="flyer-location" style="padding: 0.35rem 0; font-weight: 700; color: #38bdf8;">CAR STAND Junction</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--card-border);">
+                <td style="padding: 0.35rem 0; color: var(--text-muted); font-weight: 600;">Clothing Description:</td>
+                <td id="flyer-clothes" style="padding: 0.35rem 0; font-weight: 600;">Blue checkered shirt, dark trousers</td>
+              </tr>
+              <tr>
+                <td style="padding: 0.35rem 0; color: var(--text-muted); font-weight: 600;">Emergency Contact:</td>
+                <td id="flyer-contact" style="padding: 0.35rem 0; font-weight: 700; color: #10b981;">+91 6303126628</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+
+        <!-- Predicted Search Zones / Dijkstra Transit Analysis -->
+        <div style="background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 0.85rem; margin-bottom: 1.15rem;">
+          <div style="font-size: 0.78rem; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.45rem;">
+            🎯 Algorithmic Search Radius & Zone Priorities (Dijkstra Decaying Random-Walk)
+          </div>
+          <div id="flyer-zones-summary" style="font-size: 0.82rem; color: var(--text); line-height: 1.5;">
+            Analyzing search envelopes...
+          </div>
+        </div>
+
+        <!-- Action Hotline Box -->
+        <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 8px; padding: 0.85rem; text-align: center; margin-bottom: 1.25rem;">
+          <div style="font-weight: 800; color: #ef4444; font-size: 0.96rem;">
+            CITIZEN ACTION: IF SIGHTED, DO NOT APPROACH AGGRESSIVELY
+          </div>
+          <div style="font-size: 0.82rem; color: var(--text); margin-top: 0.25rem;">
+            Immediately report GPS location to Emergency Hotline: <b style="color: #ef4444; font-size: 1.05rem;">100</b> or Command Dispatch: <b style="color: #10b981; font-size: 1.05rem;">+91 6303126628</b>
+          </div>
+        </div>
+
+        <!-- Modal Actions (Hidden in Print) -->
+        <div class="no-print" style="display: flex; gap: 0.85rem; justify-content: flex-end;">
+          <button type="button" class="btn btn-secondary" onclick="closeFlyerModal()">Close</button>
+          <button type="button" class="btn btn-primary" onclick="printSarFlyer()">🖨️ Print / Save Official PDF</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Edit Case Modal -->
     <div id="edit-case-modal" class="modal-backdrop" style="display: none;">
       <div class="modal-box" style="max-width: 580px; max-height: 90vh; overflow-y: auto;">
@@ -2502,16 +2654,22 @@ HTML_APP = """<!DOCTYPE html>
               </div>
             </div>
 
-            <div style="display: flex; gap: 0.65rem; margin-top: 1.15rem; flex-wrap: wrap;">
+                        <div style="display: flex; gap: 0.65rem; margin-top: 1.15rem; flex-wrap: wrap; align-items: center;">
               <input type="file" id="video-file-input" accept="video/*" style="display: none;" onchange="handleVideoUpload(event)">
               <button class="btn btn-secondary btn-sm" onclick="document.getElementById('video-file-input').click()">
-                📁 Upload CCTV Video
+                📂 Upload CCTV Video
               </button>
               <button class="btn btn-secondary btn-sm" onclick="loadSampleVideo()">
-                🎬 Load Demo Video Feed
+                📹 Load Demo Feed
+              </button>
+              <button class="btn btn-secondary btn-sm" id="btn-toggle-webcam" onclick="toggleWebcam()">
+                🎥 Use Live Webcam
+              </button>
+              <button class="btn btn-secondary btn-sm" id="btn-toggle-sound" onclick="toggleSoundAlert()" title="Toggle Web Audio Alarm">
+                🔔 Alert Sound: ON
               </button>
               <button class="btn btn-danger btn-sm" id="btn-run-scan" onclick="startVideoScan()" style="margin-left: auto;">
-                ⚡ AI Scan Video For Matches
+                ⚡ AI Scan Frame & Match
               </button>
             </div>
 
@@ -3417,6 +3575,8 @@ HTML_APP = """<!DOCTYPE html>
         
         let actionButtons = '';
         if (loggedInRole === 'admin') {
+          actionButtons += `<button class="btn btn-secondary btn-sm" onclick="openEditCaseModal(${c.id})" title="Edit case metadata and coordinates">✏️ Edit</button> `;
+          actionButtons += `<button class="btn btn-secondary btn-sm" onclick="openFlyerModal(${c.id})" title="Generate Printable Official SAR Dossier">📄 Flyer</button> `;
           actionButtons += `<button class="btn btn-secondary btn-sm" onclick="openAllotModal(${c.id})" title="Allot case to specific NGO and send SMS alert">📢 Allot NGO</button> `;
           if (c.status === 'ACTIVE') {
             actionButtons += `<button class="btn btn-success btn-sm" onclick="markCaseResolved(${c.id})">✓ Resolve</button> `;
@@ -3424,6 +3584,7 @@ HTML_APP = """<!DOCTYPE html>
           actionButtons += `<button class="btn btn-danger btn-sm" onclick="deleteCase(${c.id})" title="Remove Case">🗑 Remove</button>`;
         } else {
           const isMyCase = loggedInTeam && c.assigned_team === loggedInTeam.name;
+          actionButtons += `<button class="btn btn-secondary btn-sm" onclick="openFlyerModal(${c.id})" title="View SAR Flyer">📄 Flyer</button> `;
           if (isMyCase) {
             actionButtons += `<button class="btn btn-success btn-sm" onclick="acceptCaseAndNavigate(${c.id})">🚗 Trace Route</button>`;
           } else {
@@ -3514,6 +3675,33 @@ HTML_APP = """<!DOCTYPE html>
         const res = await fetch(`/api/demo?city=${targetCity}&top=5`);
         const data = await res.json();
         adminLayers.clearLayers();
+
+        // Draw Surveillance Network Graph Links
+        if (data.edges && data.edges.length > 0) {
+          data.edges.forEach(e => {
+            L.polyline([[e.from_lat, e.from_lon], [e.to_lat, e.to_lon]], {
+              color: '#38bdf8',
+              weight: 2,
+              dashArray: '4, 8',
+              opacity: 0.45
+            }).bindPopup(`<b>Surveillance Link</b><br>${e.from_name} ➔ ${e.to_name}<br>Distance: <b>${e.distance_km} km</b>`).addTo(adminLayers);
+          });
+        }
+
+        // Draw Origin Sighting Radar Pulse
+        if (data.person && data.person.last_seen) {
+          const originLoc = data.all_locations.find(l => l.name.toLowerCase() === data.person.last_seen.toLowerCase()) || data.all_locations[0];
+          if (originLoc) {
+            L.circle([originLoc.lat, originLoc.lon], {
+              radius: Math.max((data.reach_km || 1.8) * 800, 500),
+              color: '#ef4444',
+              weight: 2,
+              dashArray: '5, 5',
+              fillColor: '#ef4444',
+              fillOpacity: 0.08
+            }).bindPopup(`<b>🚨 Origin Sighting Node: ${originLoc.name}</b><br>Subject: <b>${data.person.name}</b><br>Dijkstra Reach Radius: <b>${(data.reach_km || 1.8).toFixed(2)} km</b>`).addTo(adminLayers);
+          }
+        }
 
         data.all_locations.forEach(loc => {
           L.circleMarker([loc.lat, loc.lon], {
@@ -4042,6 +4230,323 @@ HTML_APP = """<!DOCTYPE html>
       } catch (err) { console.error(err); }
     }
 
+
+    // ==========================================
+    // CASE EDIT MODAL & SAR DOSSIER FUNCTIONS
+    // ==========================================
+    function openEditCaseModal(caseId) {
+      if (loggedInRole !== 'admin') {
+        showToast('⚠️ Access Denied: Only Police Command can edit cases.');
+        return;
+      }
+      const c = allCases.find(item => item.id === caseId);
+      if (!c) {
+        showToast('Case not found');
+        return;
+      }
+
+      document.getElementById('edit-case-id').value = c.id;
+      document.getElementById('edit-name').value = c.name || '';
+      document.getElementById('edit-age').value = c.age || 25;
+      document.getElementById('edit-gender').value = c.gender || 'Male';
+      document.getElementById('edit-clothes').value = c.clothes || '';
+      document.getElementById('edit-status').value = c.status || 'ACTIVE';
+      document.getElementById('edit-lat').value = c.lat || 15.8281;
+      document.getElementById('edit-lon').value = c.lon || 78.0373;
+      document.getElementById('edit-phone').value = c.phone || '';
+
+      // Populate cities dropdown
+      const citySel = document.getElementById('edit-city');
+      citySel.innerHTML = '';
+      allCities.forEach(city => {
+        const opt = document.createElement('option');
+        opt.value = city.id;
+        opt.innerText = `${city.name.toUpperCase()} (${city.state || ''})`;
+        if (city.id === (c.city || 'kurnool').toLowerCase()) opt.selected = true;
+        citySel.appendChild(opt);
+      });
+
+      // Photo preview
+      const previewImg = document.getElementById('edit-photo-preview-img');
+      const placeholder = document.getElementById('edit-photo-placeholder');
+      const photoBase64Input = document.getElementById('edit-photo-base64');
+      photoBase64Input.value = '';
+
+      if (c.photo_path) {
+        previewImg.src = c.photo_path;
+        previewImg.style.display = 'block';
+        placeholder.style.display = 'none';
+      } else {
+        previewImg.style.display = 'none';
+        placeholder.style.display = 'block';
+        placeholder.innerText = c.name ? c.name.charAt(0).toUpperCase() : '👤';
+      }
+
+      populateEditCaseLocationDropdown(c.city || 'kurnool', c.last_seen_location);
+      populateEditCaseTeamDropdown(c.assigned_team);
+
+      document.getElementById('edit-case-modal').style.display = 'flex';
+    }
+
+    function closeEditCaseModal() {
+      document.getElementById('edit-case-modal').style.display = 'none';
+    }
+
+    async function populateEditCaseLocationDropdown(cityId, selectedLoc) {
+      try {
+        const res = await fetch(`/api/cameras?city=${cityId}`);
+        const cams = await res.json();
+        const sel = document.getElementById('edit-loc');
+        sel.innerHTML = '';
+        Object.entries(cams).forEach(([name, data]) => {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.innerText = `${name} (${data.lat.toFixed(4)}, ${data.lon.toFixed(4)})`;
+          opt.dataset.lat = data.lat;
+          opt.dataset.lon = data.lon;
+          if (name.toLowerCase() === (selectedLoc || '').toLowerCase()) opt.selected = true;
+          sel.appendChild(opt);
+        });
+
+        // Add custom option
+        const customOpt = document.createElement('option');
+        customOpt.value = '__custom__';
+        customOpt.innerText = '📍 Custom Landmark / Coordinates';
+        sel.appendChild(customOpt);
+      } catch (e) { console.error(e); }
+    }
+
+    function populateEditCaseTeamDropdown(selectedTeam) {
+      const sel = document.getElementById('edit-team');
+      sel.innerHTML = '';
+      allTeams.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.name;
+        opt.innerText = `${t.name} (${t.city.toUpperCase()})`;
+        if (t.name === selectedTeam) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+
+    function handleEditCaseCityChange() {
+      const cityId = document.getElementById('edit-city').value;
+      populateEditCaseLocationDropdown(cityId, '');
+    }
+
+    function handleEditCaseLocationChange() {
+      const sel = document.getElementById('edit-loc');
+      const customInput = document.getElementById('edit-custom-loc');
+      if (sel.value === '__custom__') {
+        customInput.style.display = 'block';
+      } else {
+        customInput.style.display = 'none';
+        const opt = sel.options[sel.selectedIndex];
+        if (opt && opt.dataset.lat) {
+          document.getElementById('edit-lat').value = opt.dataset.lat;
+          document.getElementById('edit-lon').value = opt.dataset.lon;
+        }
+      }
+    }
+
+    function handleEditPhotoUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        document.getElementById('edit-photo-base64').value = e.target.result;
+        const img = document.getElementById('edit-photo-preview-img');
+        img.src = e.target.result;
+        img.style.display = 'block';
+        document.getElementById('edit-photo-placeholder').style.display = 'none';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function clearEditCasePhoto() {
+      document.getElementById('edit-photo-base64').value = '';
+      document.getElementById('edit-photo-input').value = '';
+      document.getElementById('edit-photo-preview-img').style.display = 'none';
+      document.getElementById('edit-photo-placeholder').style.display = 'block';
+    }
+
+    async function handleSaveEditCase(event) {
+      event.preventDefault();
+      const caseId = parseInt(document.getElementById('edit-case-id').value);
+      const locSel = document.getElementById('edit-loc');
+      const locName = locSel.value === '__custom__' ? document.getElementById('edit-custom-loc').value.trim() : locSel.value;
+
+      const payload = {
+        id: caseId,
+        name: document.getElementById('edit-name').value.trim(),
+        age: parseInt(document.getElementById('edit-age').value),
+        gender: document.getElementById('edit-gender').value,
+        clothes: document.getElementById('edit-clothes').value.trim(),
+        city: document.getElementById('edit-city').value,
+        status: document.getElementById('edit-status').value,
+        last_seen_location: locName,
+        lat: parseFloat(document.getElementById('edit-lat').value),
+        lon: parseFloat(document.getElementById('edit-lon').value),
+        assigned_team: document.getElementById('edit-team').value,
+        phone: document.getElementById('edit-phone').value.trim(),
+        photo: document.getElementById('edit-photo-base64').value || undefined
+      };
+
+      try {
+        const res = await fetch('/api/cases/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' },
+          body: JSON.stringify(payload)
+        });
+        const saved = await res.json();
+        if (saved && saved.id) {
+          const idx = allCases.findIndex(c => c.id === caseId);
+          if (idx !== -1) allCases[idx] = saved;
+          renderCasesTable();
+          loadStats();
+          closeEditCaseModal();
+          showToast(`Case #${caseId} updated successfully in PostgreSQL!`);
+        } else {
+          showToast('Failed to save case changes.');
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Error saving case updates.');
+      }
+    }
+
+    // SAR DOSSIER / FLYER FUNCTIONS
+    async function openFlyerModal(caseId) {
+      const c = allCases.find(item => item.id === caseId);
+      if (!c) { showToast('Case not found'); return; }
+
+      document.getElementById('flyer-name').innerText = c.name;
+      document.getElementById('flyer-case-id').innerText = `#${c.id}`;
+      document.getElementById('flyer-age-gender').innerText = `${c.age} Years / ${c.gender}`;
+      document.getElementById('flyer-city').innerText = (c.city || 'kurnool').toUpperCase();
+      document.getElementById('flyer-location').innerText = `${c.last_seen_location} (GPS: ${c.lat.toFixed(4)}, ${c.lon.toFixed(4)})`;
+      document.getElementById('flyer-clothes').innerText = c.clothes || 'Standard Attire';
+      document.getElementById('flyer-contact').innerText = c.phone || '+91 6303126628 / 100';
+
+      const badge = document.getElementById('flyer-status-badge');
+      badge.innerText = c.status === 'ACTIVE' ? 'URGENT SAR ACTIVE' : c.status;
+      badge.style.background = c.status === 'ACTIVE' ? '#ef4444' : '#10b981';
+
+      const photoImg = document.getElementById('flyer-photo-img');
+      const photoPlaceholder = document.getElementById('flyer-photo-placeholder');
+      if (c.photo_path) {
+        photoImg.src = c.photo_path;
+        photoImg.style.display = 'block';
+        photoPlaceholder.style.display = 'none';
+      } else {
+        photoImg.style.display = 'none';
+        photoPlaceholder.style.display = 'block';
+        photoPlaceholder.innerText = c.name.charAt(0);
+      }
+
+      // Fetch dynamic zones for this city
+      try {
+        const res = await fetch(`/api/demo?city=${c.city || 'kurnool'}&top=3`);
+        const data = await res.json();
+        const zonesHtml = (data.zones || []).map((z, idx) => `
+          <div style="margin-top: 0.25rem;">
+            <b>Zone #${z.rank} (${z.location})</b>: Prob: <span style="color:#ef4444; font-weight:700;">${(z.score * 100).toFixed(1)}%</span> &bull; Radius: <b>${z.radius_km} km</b> &bull; ${z.reason}
+          </div>
+        `).join('');
+        document.getElementById('flyer-zones-summary').innerHTML = `
+          <div>Estimated Search Radius: <b style="color:var(--accent);">${(data.reach_km || 1.8).toFixed(2)} km</b> (Walking / Multi-hop Road Traversal)</div>
+          ${zonesHtml}
+        `;
+      } catch (e) {
+        document.getElementById('flyer-zones-summary').innerText = 'Predicted search zones synchronized with regional response units.';
+      }
+
+      document.getElementById('flyer-modal').style.display = 'flex';
+    }
+
+    function closeFlyerModal() {
+      document.getElementById('flyer-modal').style.display = 'none';
+    }
+
+    function printSarFlyer() {
+      window.print();
+    }
+
+    // WEBCAM & AUDIO ALARM
+    let webcamStream = null;
+    let isWebcamRunning = false;
+    let soundAlertEnabled = true;
+
+    async function toggleWebcam() {
+      const video = document.getElementById('video-player');
+      const btn = document.getElementById('btn-toggle-webcam');
+      const badge = document.querySelector('.cctv-rec-badge');
+      const placeholder = document.getElementById('video-placeholder');
+
+      if (isWebcamRunning) {
+        if (webcamStream) {
+          webcamStream.getTracks().forEach(track => track.stop());
+          webcamStream = null;
+        }
+        video.srcObject = null;
+        isWebcamRunning = false;
+        btn.innerHTML = '🎥 Use Live Webcam';
+        btn.className = 'btn btn-secondary btn-sm';
+        if (badge) badge.innerHTML = '<span style="color: #ef4444;">●</span> LIVE REC &bull; 1080p';
+        placeholder.style.display = 'block';
+        showToast('Webcam feed stopped.');
+      } else {
+        try {
+          webcamStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } } });
+          video.srcObject = webcamStream;
+          placeholder.style.display = 'none';
+          video.play();
+          isWebcamRunning = true;
+          btn.innerHTML = '⏹️ Stop Webcam';
+          btn.className = 'btn btn-danger btn-sm';
+          if (badge) badge.innerHTML = '<span style="color: #10b981;">●</span> LIVE WEBCAM ACTIVE';
+          showToast('Live webcam feed active.');
+        } catch (err) {
+          console.warn('Webcam access error:', err);
+          showToast('⚠️ Webcam access error: ' + (err.message || 'Check browser permissions'));
+        }
+      }
+    }
+
+    function toggleSoundAlert() {
+      soundAlertEnabled = !soundAlertEnabled;
+      const btn = document.getElementById('btn-toggle-sound');
+      if (btn) {
+        btn.innerText = soundAlertEnabled ? '🔔 Alert Sound: ON' : '🔕 Alert Sound: OFF';
+      }
+      showToast(soundAlertEnabled ? 'Audio alarm enabled.' : 'Audio alarm muted.');
+    }
+
+    function playTacticalAlarm() {
+      if (!soundAlertEnabled) return;
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const playBeep = (freq, start, dur) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+          gain.gain.setValueAtTime(0.2, ctx.currentTime + start);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(ctx.currentTime + start);
+          osc.stop(ctx.currentTime + start + dur);
+        };
+        playBeep(980, 0, 0.16);
+        playBeep(1320, 0.18, 0.18);
+        playBeep(1760, 0.38, 0.28);
+      } catch (e) {
+        console.warn('Audio alarm playback error:', e);
+      }
+    }
+
     // Video Player & Scanner Functions
     function handleVideoUpload(event) {
       const file = event.target.files[0];
@@ -4309,9 +4814,9 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
                 self._send_json({"status": "error", "error": "Invalid admin credentials"}, status=401)
                 return
 
-            # NGO Team login check
+            # NGO Team login check with salted password verification
             for t in APP_STATE["teams"]:
-                if t.get("username") == uname and t.get("password") == pwd:
+                if t.get("username") == uname and verify_password(t.get("password", ""), pwd):
                     self._send_json({"status": "success", "role": "ngo", "team": t})
                     return
 

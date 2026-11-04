@@ -9,6 +9,33 @@ import psycopg2
 from pgvector.psycopg2 import register_vector
 
 from .config import Settings, get_settings
+import hashlib
+import secrets
+
+
+def hash_password(password: str) -> str:
+    """Return a salted SHA-256 hash string in the format: sha256$salt$hash"""
+    if not password:
+        return ""
+    salt = secrets.token_hex(8)
+    h = hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
+    return f"sha256${salt}${h}"
+
+
+def verify_password(stored: str, provided: str) -> bool:
+    """Verify password against stored string. Supports both hashed (sha256$salt$hash) and plaintext."""
+    if not stored or not provided:
+        return False
+    if stored.startswith("sha256$") and stored.count("$") == 2:
+        try:
+            _, salt, expected_hash = stored.split("$", 2)
+            test_hash = hashlib.sha256((salt + provided).encode("utf-8")).hexdigest()
+            return test_hash == expected_hash
+        except Exception:
+            return False
+    # Backward compatible fallback for existing plaintext passwords in db
+    return stored == provided
+
 
 SCHEMA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "db", "schema.sql")
 
@@ -423,14 +450,15 @@ def ensure_db_schema(settings: Optional[Settings] = None) -> bool:
             cur.execute("ALTER TABLE missing_persons ADD COLUMN IF NOT EXISTS contact_phone VARCHAR(50);")
             cur.execute("ALTER TABLE missing_persons ADD COLUMN IF NOT EXISTS last_seen_latitude DOUBLE PRECISION;")
             cur.execute("ALTER TABLE missing_persons ADD COLUMN IF NOT EXISTS last_seen_longitude DOUBLE PRECISION;")
+            cur.execute("ALTER TABLE camera_locations ADD COLUMN IF NOT EXISTS city VARCHAR(100) DEFAULT 'kurnool';")
 
             # Seed camera locations
             for cname, (clat, clon) in DEFAULT_CAMERAS.items():
                 cur.execute(
-                    """INSERT INTO camera_locations (name, latitude, longitude)
-                       VALUES (%s, %s, %s)
-                       ON CONFLICT (name) DO UPDATE SET latitude=EXCLUDED.latitude, longitude=EXCLUDED.longitude""",
-                    (cname, clat, clon),
+                    """INSERT INTO camera_locations (name, latitude, longitude, city)
+                       VALUES (%s, %s, %s, %s)
+                       ON CONFLICT (name) DO UPDATE SET latitude=EXCLUDED.latitude, longitude=EXCLUDED.longitude, city=EXCLUDED.city""",
+                    (cname, clat, clon, _infer_city(cname) or "kurnool"),
                 )
 
             # Check if rescue_teams has ANY records; seed ONLY if table is completely empty
@@ -780,7 +808,7 @@ def save_team_to_db(team: Dict[str, Any], settings: Optional[Settings] = None) -
                     float(team.get("lon", 78.0450)),
                     team.get("available", True),
                     team.get("username", "new_team").strip(),
-                    team.get("password", "ngo123").strip(),
+                    hash_password(team.get("password", "ngo123").strip()),
                     team.get("email", "").strip(),
                 ),
             )
