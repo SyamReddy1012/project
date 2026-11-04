@@ -618,18 +618,18 @@ def update_case_in_db(case_id: int, updates: Dict[str, Any], settings: Optional[
                 conn.close()
                 return None
 
-            name = updates.get("name", row[1])
-            name = str(name).strip() if name else "Unnamed Case"
-            age = int(updates.get("age", row[2] or 25))
-            gender = updates.get("gender", row[3] or "Unknown")
-            clothes = str(updates.get("clothes", row[4] or "")).strip()
-            city = str(updates.get("city", row[5] or "kurnool")).strip().lower()
-            last_seen = str(updates.get("last_seen_location", row[6] or "CAR STAND")).strip()
-            status = str(updates.get("status", row[7] or "ACTIVE")).strip().upper()
-            lat = float(updates.get("lat", row[8] or 15.8281))
-            lon = float(updates.get("lon", row[9] or 78.0373))
-            photo = str(updates.get("photo_path", row[10] or ""))
-            phone = str(updates.get("phone", row[11] or ""))
+            name = (updates.get("name") if updates.get("name") is not None else row[1]) or "Unnamed Case"
+            name = str(name).strip()
+            age = int(updates.get("age") if updates.get("age") is not None else (row[2] or 25))
+            gender = updates.get("gender") if updates.get("gender") is not None else (row[3] or "Unknown")
+            clothes = str(updates.get("clothes") if "clothes" in updates else (updates.get("clothes_description") if "clothes_description" in updates else (row[4] or ""))).strip()
+            city = str(updates.get("city") if updates.get("city") is not None else (row[5] or "kurnool")).strip().lower()
+            last_seen = str(updates.get("last_seen_location") if "last_seen_location" in updates else (updates.get("location") if "location" in updates else (row[6] or "CAR STAND"))).strip()
+            status = str(updates.get("status") if "status" in updates else (updates.get("case_status") if "case_status" in updates else (row[7] or "ACTIVE"))).strip().upper()
+            lat = float(updates.get("lat") if updates.get("lat") is not None else (row[8] or 15.8281))
+            lon = float(updates.get("lon") if updates.get("lon") is not None else (row[9] or 78.0373))
+            photo = updates.get("photo_path") if "photo_path" in updates else (row[10] or "")
+            phone = str((updates.get("phone") or updates.get("contact_phone")) if ("phone" in updates or "contact_phone" in updates) else (row[11] or "")).strip()
 
             cur.execute(
                 """UPDATE missing_persons

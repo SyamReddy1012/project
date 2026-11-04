@@ -668,6 +668,9 @@ def _send_case_allotment_notification(case: dict, team: dict, note: str = "", ph
 
 
 def _get_app_stats():
+    db_cases = load_cases_from_db()
+    if db_cases is not None:
+        APP_STATE["cases"] = db_cases
     cases = APP_STATE["cases"]
     total = len(cases)
     active = sum(1 for c in cases if c.get("status") == "ACTIVE")
@@ -3031,6 +3034,7 @@ HTML_APP = """<!DOCTYPE html>
 
         currentRole = 'admin';
         loadNotifications();
+        renderCasesTable();
         resizeMaps();
       }
     }
@@ -4234,6 +4238,67 @@ HTML_APP = """<!DOCTYPE html>
     // ==========================================
     // CASE EDIT MODAL & SAR DOSSIER FUNCTIONS
     // ==========================================
+
+    // ==========================================
+    // INSTANT TABLE IN-LINE CITY & STATUS HANDLERS
+    // ==========================================
+    async function updateCaseCity(caseId, newCity) {
+      newCity = (newCity || 'kurnool').toLowerCase();
+      try {
+        const res = await fetch('/api/cases/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' },
+          body: JSON.stringify({ id: caseId, city: newCity })
+        });
+        const data = await res.json();
+        const updated = data.case || data;
+        if (updated && (updated.id || data.status === 'success')) {
+          const idx = allCases.findIndex(c => c.id === caseId);
+          if (idx !== -1) {
+            allCases[idx].city = newCity;
+          }
+          showToast(`Case #${caseId} jurisdiction updated to ${newCity.toUpperCase()} in database.`);
+          loadStats();
+          renderCasesTable();
+        } else {
+          showToast('Failed to update case city in database.');
+          loadCases();
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Network error updating case city.');
+        loadCases();
+      }
+    }
+
+    async function setCaseStatus(caseId, newStatus) {
+      newStatus = (newStatus || 'ACTIVE').toUpperCase();
+      try {
+        const res = await fetch('/api/cases/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' },
+          body: JSON.stringify({ id: caseId, status: newStatus })
+        });
+        const data = await res.json();
+        if (data && (data.status || data.case_id)) {
+          const idx = allCases.findIndex(c => c.id === caseId);
+          if (idx !== -1) {
+            allCases[idx].status = newStatus;
+          }
+          showToast(`Case #${caseId} status updated to ${newStatus} in database.`);
+          loadStats();
+          renderCasesTable();
+        } else {
+          showToast('Failed to update case status.');
+          loadCases();
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Network error updating case status.');
+        loadCases();
+      }
+    }
+
     function openEditCaseModal(caseId) {
       if (loggedInRole !== 'admin') {
         showToast('⚠️ Access Denied: Only Police Command can edit cases.');
@@ -4397,10 +4462,13 @@ HTML_APP = """<!DOCTYPE html>
           headers: { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' },
           body: JSON.stringify(payload)
         });
-        const saved = await res.json();
-        if (saved && saved.id) {
+        const data = await res.json();
+        const saved = data.case || data;
+        if (saved && (saved.id || data.status === 'success')) {
           const idx = allCases.findIndex(c => c.id === caseId);
-          if (idx !== -1) allCases[idx] = saved;
+          if (idx !== -1) {
+            allCases[idx] = Object.assign({}, allCases[idx], saved);
+          }
           renderCasesTable();
           loadStats();
           closeEditCaseModal();
@@ -4967,7 +5035,7 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
 
             # Process photo if provided (base64 data URL)
             photo_path = ""
-            photo_data = body.get("photo_data", "")
+            photo_data = body.get("photo_data", "") or body.get("photo", "")
             if photo_data and photo_data.startswith("data:image"):
                 try:
                     header, encoded = photo_data.split(",", 1)
@@ -5107,11 +5175,11 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
                     c.update(updated_case)
                     break
 
-            self._send_json({
-                "status": "success",
-                "message": f"Case #{cid} ({updated_case['name']}) updated in PostgreSQL database.",
-                "case": updated_case,
-            })
+            resp = dict(updated_case)
+            resp["status"] = "success"
+            resp["message"] = f"Case #{cid} ({updated_case['name']}) updated in PostgreSQL database."
+            resp["case"] = updated_case
+            self._send_json(resp)
             return
 
         if parsed.path == "/api/cases/status":
