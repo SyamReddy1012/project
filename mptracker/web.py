@@ -11,8 +11,11 @@ Features:
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
+import re
+import time
 import urllib.parse
 import urllib.request
 from datetime import datetime
@@ -1999,25 +2002,56 @@ HTML_APP = """<!DOCTYPE html>
 
     <!-- Add Case Modal -->
     <div id="add-case-modal" class="modal-backdrop" style="display: none;">
-      <div class="modal-box">
-        <h2>+ Enroll New Missing Person Case</h2>
-        <p style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 1.35rem;">
-          Register a new individual into the investigation database and active sighting graph.
+      <div class="modal-box" style="max-width: 580px; max-height: 90vh; overflow-y: auto;">
+        <h2>?? + Enroll New Missing Person Case</h2>
+        <p style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 1.2rem;">
+          Register a missing individual into the PostgreSQL database, initialize facial vectors, and mobilize search zones.
         </p>
         <form onsubmit="handleCreateCase(event)">
+          <!-- Photo Upload & Face Preview Zone -->
+          <div class="form-group" style="margin-bottom: 1.25rem;">
+            <label style="display: flex; align-items: center; justify-content: space-between;">
+              <span>?? Person Photo / Facial Recognition Snapshot</span>
+              <span style="font-size: 0.72rem; color: var(--accent); font-weight: normal;">DeepFace ArcFace 512-d</span>
+            </label>
+            <div style="display: flex; gap: 1rem; align-items: center; background: var(--input-bg); border: 2px dashed rgba(59, 130, 246, 0.35); border-radius: 12px; padding: 0.85rem;">
+              <div id="case-photo-preview-box" style="width: 70px; height: 70px; border-radius: 50%; overflow: hidden; background: #0f172a; border: 2px solid var(--accent); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 0 10px rgba(59,130,246,0.3);">
+                <span id="case-photo-placeholder" style="font-size: 2.2rem;">??</span>
+                <img id="case-photo-preview-img" src="" style="width: 100%; height: 100%; object-fit: cover; display: none;" />
+              </div>
+              <div style="flex: 1;">
+                <div style="display: flex; gap: 0.45rem; flex-wrap: wrap; margin-bottom: 0.4rem;">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('new-photo-input').click()">?? Browse Image...</button>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="clearCasePhoto()">? Remove</button>
+                </div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.35rem;">Or select sample avatar:</div>
+                <div style="display: flex; gap: 0.3rem; flex-wrap: wrap;">
+                  <button type="button" class="btn btn-secondary btn-sm" style="padding: 2px 7px; font-size: 0.74rem;" onclick="setAvatarPreset('male')">?? Male</button>
+                  <button type="button" class="btn btn-secondary btn-sm" style="padding: 2px 7px; font-size: 0.74rem;" onclick="setAvatarPreset('female')">?? Female</button>
+                  <button type="button" class="btn btn-secondary btn-sm" style="padding: 2px 7px; font-size: 0.74rem;" onclick="setAvatarPreset('senior')">?? Senior</button>
+                  <button type="button" class="btn btn-secondary btn-sm" style="padding: 2px 7px; font-size: 0.74rem;" onclick="setAvatarPreset('youth')">?? Youth</button>
+                </div>
+              </div>
+              <input type="file" id="new-photo-input" accept="image/*" onchange="handlePhotoUpload(event)" style="display: none;" />
+              <input type="hidden" id="new-photo-base64" value="" />
+            </div>
+          </div>
+
           <div class="form-group">
             <label for="new-city">Jurisdiction City / Region *</label>
             <select id="new-city" onchange="handleNewCaseCityChange()" required>
             </select>
           </div>
+
           <div class="form-group">
             <label for="new-name">Full Name *</label>
             <input type="text" id="new-name" placeholder="e.g. Ramesh Kumar" required />
           </div>
+
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
             <div class="form-group">
               <label for="new-age">Age *</label>
-              <input type="number" id="new-age" value="21" required />
+              <input type="number" id="new-age" value="21" min="1" max="120" required />
             </div>
             <div class="form-group">
               <label for="new-gender">Gender</label>
@@ -2028,20 +2062,41 @@ HTML_APP = """<!DOCTYPE html>
               </select>
             </div>
           </div>
+
           <div class="form-group">
-            <label for="new-clothes">Clothing & Description</label>
-            <input type="text" id="new-clothes" placeholder="e.g. Yellow t-shirt, blue jeans, cap" />
+            <label for="new-clothes">Clothing & Physical Appearance Description *</label>
+            <input type="text" id="new-clothes" placeholder="e.g. Yellow t-shirt, blue jeans, black shoes, backpack" required />
           </div>
+
           <div class="form-group">
-            <label for="new-loc">Last Seen Location / Sighting Node *</label>
-            <select id="new-loc" required>
+            <label for="new-loc">Last Seen Location / Landmark Node *</label>
+            <select id="new-loc" onchange="handleNewCaseLocationChange()" required>
+            </select>
+            <input type="text" id="new-custom-loc" placeholder="Enter Custom Landmark Name (e.g. Near Metro Pillar 18)" style="display: none; margin-top: 0.5rem; width: 100%;" />
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+            <div class="form-group">
+              <label for="new-lat">Latitude *</label>
+              <input type="number" step="0.0001" id="new-lat" value="15.8281" required />
+            </div>
+            <div class="form-group">
+              <label for="new-lon">Longitude *</label>
+              <input type="number" step="0.0001" id="new-lon" value="78.0373" required />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="new-team">Assigned Response Unit (NGO / Search Party) *</label>
+            <select id="new-team" required>
             </select>
           </div>
+
           <div class="form-group">
-            <label for="new-team">Assigned Response Unit (NGO / Team)</label>
-            <select id="new-team">
-            </select>
+            <label for="new-phone">Emergency Informant / Guardian Contact Phone</label>
+            <input type="text" id="new-phone" placeholder="e.g. 98480-12345" value="6303126628" />
           </div>
+
           <div style="display: flex; gap: 0.85rem; margin-top: 1.45rem;">
             <button type="button" class="btn btn-secondary" onclick="closeAddCaseModal()" style="flex: 1;">Cancel</button>
             <button type="submit" class="btn btn-success" style="flex: 2;">Save Case & Begin Tracking</button>
@@ -2079,8 +2134,12 @@ HTML_APP = """<!DOCTYPE html>
             </div>
             <div class="form-group">
               <label for="ngo-phone">Contact Phone *</label>
-              <input type="text" id="ngo-phone" placeholder="e.g. 98480-12345" required />
+              <input type="text" id="ngo-phone" placeholder="e.g. 98480-12345" value="6303126628" required />
             </div>
+          </div>
+          <div class="form-group">
+            <label for="ngo-email">Contact Email Address</label>
+            <input type="email" id="ngo-email" placeholder="e.g. operations@ngo-rescue.org" />
           </div>
           <div class="form-group">
             <label for="ngo-base-preset">Base Location Area</label>
@@ -2286,6 +2345,8 @@ HTML_APP = """<!DOCTYPE html>
           <select id="city-select-dropdown" onchange="switchCity(this.value)" class="city-select-box">
             <!-- Dynamically populated -->
           </select>
+          <button class="btn btn-success btn-sm" onclick="openAddCaseModal()" style="font-weight: 700; white-space: nowrap;">?? + Enroll Case</button>
+          <button class="btn btn-info btn-sm" onclick="openAddNgoModal()" style="font-weight: 700; white-space: nowrap; background: rgba(14, 165, 233, 0.2); border: 1px solid rgba(14, 165, 233, 0.4); color: #38bdf8;">?? + Add NGO</button>
         </div>
       </div>
 
@@ -2868,6 +2929,7 @@ HTML_APP = """<!DOCTYPE html>
     function handleNewCaseCityChange() {
       const cityId = document.getElementById('new-city').value;
       populateAddCaseLocationDropdown(cityId);
+      populateCaseTeamDropdown();
     }
 
     async function populateAddCaseLocationDropdown(cityId) {
@@ -2877,13 +2939,102 @@ HTML_APP = """<!DOCTYPE html>
         const sel = document.getElementById('new-loc');
         if (!sel) return;
         sel.innerHTML = '';
-        Object.entries(cams).forEach(([name, data]) => {
+        let firstLat = null, firstLon = null;
+        Object.entries(cams).forEach(([name, data], idx) => {
           const opt = document.createElement('option');
           opt.value = name;
           opt.innerText = `${name} (${data.lat.toFixed(4)}, ${data.lon.toFixed(4)})`;
+          opt.dataset.lat = data.lat;
+          opt.dataset.lon = data.lon;
+          if (idx === 0) { firstLat = data.lat; firstLon = data.lon; }
           sel.appendChild(opt);
         });
+
+        // Add custom location option
+        const customOpt = document.createElement('option');
+        customOpt.value = '__custom__';
+        customOpt.innerText = '? Custom Landmark / Enter GPS Coordinates';
+        sel.appendChild(customOpt);
+
+        const latInput = document.getElementById('new-lat');
+        const lonInput = document.getElementById('new-lon');
+        if (latInput && lonInput && firstLat !== null) {
+          latInput.value = firstLat;
+          lonInput.value = firstLon;
+        }
+        handleNewCaseLocationChange();
       } catch (e) { console.error(e); }
+    }
+
+    function handleNewCaseLocationChange() {
+      const sel = document.getElementById('new-loc');
+      const customInput = document.getElementById('new-custom-loc');
+      if (!sel) return;
+      if (sel.value === '__custom__') {
+        if (customInput) {
+          customInput.style.display = 'block';
+          customInput.focus();
+        }
+      } else {
+        if (customInput) customInput.style.display = 'none';
+        const opt = sel.options[sel.selectedIndex];
+        if (opt && opt.dataset.lat && opt.dataset.lon) {
+          const latInput = document.getElementById('new-lat');
+          const lonInput = document.getElementById('new-lon');
+          if (latInput) latInput.value = opt.dataset.lat;
+          if (lonInput) lonInput.value = opt.dataset.lon;
+        }
+      }
+    }
+
+    function handlePhotoUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        showToast('?? Please select an image file (JPEG, PNG, WebP).');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const base64 = evt.target.result;
+        document.getElementById('new-photo-base64').value = base64;
+        const img = document.getElementById('case-photo-preview-img');
+        const ph = document.getElementById('case-photo-placeholder');
+        img.src = base64;
+        img.style.display = 'block';
+        if (ph) ph.style.display = 'none';
+        showToast('?? Photo loaded & ready for ArcFace vector enrollment');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function clearCasePhoto() {
+      const b64 = document.getElementById('new-photo-base64');
+      if (b64) b64.value = '';
+      const input = document.getElementById('new-photo-input');
+      if (input) input.value = '';
+      const img = document.getElementById('case-photo-preview-img');
+      const ph = document.getElementById('case-photo-placeholder');
+      if (img) { img.src = ''; img.style.display = 'none'; }
+      if (ph) ph.style.display = 'block';
+    }
+
+    function setAvatarPreset(type) {
+      const presets = {
+        male: { bg: '#1e3a8a', char: '??' },
+        female: { bg: '#831843', char: '??' },
+        senior: { bg: '#374151', char: '??' },
+        youth: { bg: '#065f46', char: '??' },
+      };
+      const p = presets[type] || presets.male;
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><circle cx="64" cy="64" r="64" fill="${p.bg}"/><text x="50%" y="54%" font-size="60" dominant-baseline="middle" text-anchor="middle">${p.char}</text></svg>`;
+      const dataUrl = 'data:image/svg+xml;base64,' + btoa(svg);
+      document.getElementById('new-photo-base64').value = dataUrl;
+      const img = document.getElementById('case-photo-preview-img');
+      const ph = document.getElementById('case-photo-placeholder');
+      if (img) { img.src = dataUrl; img.style.display = 'block'; }
+      if (ph) ph.style.display = 'none';
+      showToast(`Selected ${type} avatar preset`);
     }
 
     function handleNgoCityChange() {
@@ -3084,10 +3235,21 @@ HTML_APP = """<!DOCTYPE html>
       const sel = document.getElementById('new-team');
       if (!sel) return;
       sel.innerHTML = '';
-      allTeams.forEach(t => {
+      const curCity = (currentCity || 'kurnool').toLowerCase();
+      // Sort so current city teams appear first
+      const sortedTeams = [...allTeams].sort((a, b) => {
+        const aCity = (a.city || 'kurnool').toLowerCase();
+        const bCity = (b.city || 'kurnool').toLowerCase();
+        if (aCity === curCity && bCity !== curCity) return -1;
+        if (aCity !== curCity && bCity === curCity) return 1;
+        return a.name.localeCompare(b.name);
+      });
+
+      sortedTeams.forEach(t => {
         const opt = document.createElement('option');
         opt.value = t.name;
-        opt.innerText = `${t.name} (${t.base_location} - ${(t.city || 'kurnool').toUpperCase()})`;
+        const isCurrentCity = (t.city || 'kurnool').toLowerCase() === curCity;
+        opt.innerText = `${isCurrentCity ? '? ' : ''}${t.name} (${t.base_location} - ${(t.city || 'kurnool').toUpperCase()})`;
         sel.appendChild(opt);
       });
     }
@@ -3169,9 +3331,13 @@ HTML_APP = """<!DOCTYPE html>
              <button class="btn btn-secondary btn-sm" style="font-size: 0.7rem; padding: 2px 7px; margin-left: 6px; border-radius: 4px;" onclick="openAllotModal(${c.id})" title="Reassign to another NGO">Change</button>`
           : `<span style="font-weight: 700; color: var(--accent);">${c.assigned_team}</span>`;
 
+        const photoThumb = c.photo_path
+          ? `<img src="${c.photo_path}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent); vertical-align: middle; margin-right: 8px;" onerror="this.style.display='none'" />`
+          : `<span style="display: inline-flex; width: 32px; height: 32px; border-radius: 50%; background: rgba(59,130,246,0.2); color: #38bdf8; border: 1px solid rgba(59,130,246,0.4); align-items: center; justify-content: center; font-weight: 800; font-size: 0.8rem; margin-right: 8px;">${c.name.charAt(0)}</span>`;
+
         tr.innerHTML = `
           <td class="mono" style="color: var(--accent);">#${c.id}</td>
-          <td style="font-weight: 800; color: var(--text);">${c.name}</td>
+          <td style="font-weight: 800; color: var(--text); display: flex; align-items: center;">${photoThumb} <span>${c.name}</span></td>
           <td><span class="badge" style="background:#3b82f6;">${cityTag}</span></td>
           <td>${c.age} / ${c.gender}</td>
           <td style="color: var(--text-muted);">${c.clothes || 'Standard'}</td>
@@ -3945,6 +4111,24 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             self._send_json(route)
             return
 
+        if path.startswith("/uploads/"):
+            rel_path = path.lstrip("/").replace("/", os.sep)
+            full_path = os.path.join(os.getcwd(), rel_path)
+            if os.path.exists(full_path) and os.path.isfile(full_path):
+                self.send_response(200)
+                ext = os.path.splitext(full_path)[1].lower()
+                mime = "image/jpeg" if ext in (".jpg", ".jpeg") else "image/png" if ext == ".png" else "application/octet-stream"
+                self.send_header("Content-Type", mime)
+                with open(full_path, "rb") as f:
+                    data = f.read()
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            else:
+                self._send_json({"error": "File not found"}, status=404)
+                return
+
         if path == "/api/cities":
             self._send_json(list(CITIES.values()))
             return
@@ -4031,14 +4215,16 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/teams/add":
-
+            city_id = (body.get("city") or "kurnool").lower()
             new_id = max([t["id"] for t in APP_STATE["teams"]], default=0) + 1
             entry = {
                 "id": new_id,
-                "name": body.get("name", "New Rescue Team"),
+                "name": body.get("name", "New Rescue Team").strip(),
                 "org": body.get("org", "NGO"),
-                "phone": body.get("phone", "6303126628"),
-                "base_location": body.get("base_location", "Kurnool"),
+                "city": city_id,
+                "phone": body.get("phone", "6303126628").strip(),
+                "email": body.get("email", "").strip(),
+                "base_location": body.get("base_location", f"{city_id.title()} Base").strip(),
                 "lat": float(body.get("lat", 15.8350)),
                 "lon": float(body.get("lon", 78.0450)),
                 "username": body.get("username", f"ngo_{new_id}").strip(),
@@ -4136,21 +4322,60 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
 
 
         if parsed.path == "/api/cases/add":
-            loc_name = body.get("last_seen_location", "CAR STAND")
-            coords = CAMERA_LOCATIONS.get(loc_name, {"lat": 15.8281, "lon": 78.0373})
+            city_id = (body.get("city") or "kurnool").lower()
+            loc_name = body.get("last_seen_location", "").strip() or "CAR STAND"
+            coords = CAMERA_LOCATIONS.get(loc_name)
+            if not coords:
+                lat_val = float(body.get("lat")) if body.get("lat") is not None else None
+                lon_val = float(body.get("lon")) if body.get("lon") is not None else None
+                if lat_val is not None and lon_val is not None:
+                    coords = {"lat": lat_val, "lon": lon_val, "city": city_id}
+                elif city_id in CITIES:
+                    coords = {"lat": CITIES[city_id]["lat"], "lon": CITIES[city_id]["lon"], "city": city_id}
+                else:
+                    coords = {"lat": 15.8281, "lon": 78.0373, "city": "kurnool"}
+                CAMERA_LOCATIONS[loc_name] = {
+                    "lat": coords["lat"],
+                    "lon": coords["lon"],
+                    "city": city_id,
+                    "label": f"{loc_name} ({coords['lat']:.4f}, {coords['lon']:.4f})",
+                }
+
             assigned_team_name = body.get("assigned_team", "Helping Hands NGO")
 
+            # Process photo if provided (base64 data URL)
+            photo_path = ""
+            photo_data = body.get("photo_data", "")
+            if photo_data and photo_data.startswith("data:image"):
+                try:
+                    header, encoded = photo_data.split(",", 1)
+                    img_bytes = base64.b64decode(encoded)
+                    os.makedirs("uploads", exist_ok=True)
+                    clean_name = re.sub(r'[^a-zA-Z0-9_]', '', body.get("name", "person").lower())
+                    filename = f"person_{int(time.time())}_{clean_name}.jpg"
+                    filepath = os.path.join("uploads", filename)
+                    with open(filepath, "wb") as f:
+                        f.write(img_bytes)
+                    photo_path = f"/uploads/{filename}"
+                except Exception as exc:
+                    print(f"[!] Photo decode warning: {exc}")
+            elif body.get("photo_path"):
+                photo_path = body.get("photo_path")
+
             entry = {
-                "name": body.get("name", "Unnamed Case"),
-                "age": body.get("age", 20),
+                "name": body.get("name", "Unnamed Case").strip(),
+                "city": city_id,
+                "age": int(body.get("age", 20)),
                 "gender": body.get("gender", "Unknown"),
-                "clothes": body.get("clothes", ""),
+                "clothes": body.get("clothes", "").strip(),
                 "last_seen_location": loc_name,
                 "status": "ACTIVE",
                 "created_at": datetime.now().strftime("%d %b, %H:%M"),
                 "assigned_team": assigned_team_name,
                 "lat": coords["lat"],
                 "lon": coords["lon"],
+                "photo_path": photo_path,
+                "phone": body.get("phone", "").strip(),
             }
             saved_entry = save_case_to_db(entry)
             APP_STATE["cases"].insert(0, saved_entry)

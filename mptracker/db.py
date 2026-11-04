@@ -13,6 +13,7 @@ from .config import Settings, get_settings
 SCHEMA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "db", "schema.sql")
 
 DEFAULT_CAMERAS = {
+    # Kurnool
     "CAR STAND": (15.8281, 78.0373),
     "Budhwarpet Market": (15.8350, 78.0450),
     "Kurnool City Railway": (15.8310, 78.0420),
@@ -27,6 +28,35 @@ DEFAULT_CAMERAS = {
     "Collectorate": (15.8200, 78.0450),
     "Government Hospital": (15.8150, 78.0300),
     "Tungabhadra Bridge": (15.8420, 78.0300),
+    # Hyderabad
+    "Charminar Heritage Zone": (17.3616, 78.4747),
+    "Charminar Heritage Node": (17.3616, 78.4747),
+    "Hitec City Cyber Towers": (17.4504, 78.3808),
+    "Secunderabad Railway Terminal": (17.4399, 78.5017),
+    "Gachibowli Stadium Junction": (17.4401, 78.3489),
+    # Bengaluru
+    "Majestic Central Terminal": (12.9767, 77.5713),
+    "MG Road Metro Station": (12.9756, 77.6066),
+    "Electronic City Tollway": (12.8399, 77.6770),
+    "Whitefield ITPL Hub": (12.9863, 77.7337),
+    # Vijayawada
+    "PNBS Central Bus Station": (16.5165, 80.6200),
+    "Benz Circle Junction": (16.5004, 80.6480),
+    # Visakhapatnam
+    "RK Beach Promenade": (17.7126, 83.3182),
+    "Dwaraka Bus Station (RTC Complex)": (17.7275, 83.3039),
+    # Tirupati
+    "Alipiri Footpath Toll Gate": (13.6521, 79.3872),
+    "Tirupati Main Railway Station": (13.6288, 79.4192),
+    # Chennai
+    "Puratchi Thalaivar Central Station": (13.0827, 80.2707),
+    "T-Nagar Panagal Park": (13.0418, 80.2337),
+    # Mumbai
+    "CSMT Heritage Terminus": (18.9401, 72.8354),
+    "Gateway of India Pier": (18.9220, 72.8347),
+    # Delhi
+    "Connaught Place Inner Circle": (28.6315, 77.2167),
+    "New Delhi Railway Station": (28.6429, 77.2195),
 }
 
 DEFAULT_SEED_TEAMS = [
@@ -34,10 +64,12 @@ DEFAULT_SEED_TEAMS = [
         "id": 1,
         "name": "Helping Hands NGO",
         "org": "NGO",
+        "city": "kurnool",
         "base_location": "Budhwarpet Base",
         "lat": 15.8350,
         "lon": 78.0450,
         "phone": "6303126628",
+        "email": "contact@helpinghands-knl.org",
         "username": "helping_hands",
         "password": "ngo123",
         "available": True,
@@ -46,10 +78,12 @@ DEFAULT_SEED_TEAMS = [
         "id": 2,
         "name": "City Police Patrol 1",
         "org": "Police",
+        "city": "kurnool",
         "base_location": "Kurnool Town Police Station",
         "lat": 15.8281,
         "lon": 78.0373,
         "phone": "100-000-0001",
+        "email": "patrol1@kurnoolpolice.gov.in",
         "username": "police_patrol",
         "password": "police123",
         "available": True,
@@ -58,12 +92,98 @@ DEFAULT_SEED_TEAMS = [
         "id": 3,
         "name": "Volunteer Unit A",
         "org": "Volunteer",
+        "city": "kurnool",
         "base_location": "Nandyal Road Base",
         "lat": 15.8100,
         "lon": 78.0600,
         "phone": "91234-56789",
+        "email": "volunteer.a@rayalaseema.org",
         "username": "volunteer_a",
         "password": "volunteer123",
+        "available": True,
+    },
+    {
+        "id": 4,
+        "name": "Hyderabad Disaster Quick Response Team",
+        "org": "Disaster Relief",
+        "city": "hyderabad",
+        "base_location": "HITEC City Rapid Outpost",
+        "lat": 17.4450,
+        "lon": 78.3750,
+        "phone": "94401-22334",
+        "email": "hyd.rescue@telangana.gov.in",
+        "username": "hyd_rescue",
+        "password": "hyd123",
+        "available": True,
+    },
+    {
+        "id": 5,
+        "name": "Bengaluru Red Cross Unit",
+        "org": "NGO",
+        "city": "bengaluru",
+        "base_location": "MG Road Operations Center",
+        "lat": 12.9750,
+        "lon": 77.6050,
+        "phone": "98860-44556",
+        "email": "redcross@bengaluru.org",
+        "username": "blr_redcross",
+        "password": "blr123",
+        "available": True,
+    },
+    {
+        "id": 6,
+        "name": "Amaravati Emergency Corps",
+        "org": "Disaster Relief",
+        "city": "vijayawada",
+        "base_location": "Benz Circle Response Depot",
+        "lat": 16.5020,
+        "lon": 80.6450,
+        "phone": "98480-77889",
+        "email": "emergency@amaravati.gov.in",
+        "username": "amaravati_corps",
+        "password": "vja123",
+        "available": True,
+    },
+    {
+        "id": 7,
+        "name": "Coastal Rescue Force",
+        "org": "Volunteer",
+        "city": "visakhapatnam",
+        "base_location": "RK Beach Watch Station",
+        "lat": 17.7110,
+        "lon": 83.3150,
+        "phone": "98499-11223",
+        "email": "coastal@vizagrescue.in",
+        "username": "vizag_coastal",
+        "password": "vizag123",
+        "available": True,
+    },
+    {
+        "id": 8,
+        "name": "Tirumala Pilgrim Assistance Patrol",
+        "org": "Police",
+        "city": "tirupati",
+        "base_location": "Alipiri Security Outpost",
+        "lat": 13.6510,
+        "lon": 79.3850,
+        "phone": "94408-33445",
+        "email": "security@tirumala.org",
+        "username": "tirupati_patrol",
+        "password": "tpt123",
+        "available": True,
+    },
+    {
+        "id": 9,
+        "name": "Mumbai Rapid Search & Rescue",
+        "org": "NGO",
+        "city": "mumbai",
+        "base_location": "Dadar Emergency Depot",
+        "lat": 19.0178,
+        "lon": 72.8478,
+        "phone": "98200-99887",
+        "email": "rescue@mumbaisos.org",
+        "username": "mumbai_rapid",
+        "password": "mum123",
         "available": True,
     },
 ]
@@ -75,6 +195,7 @@ DEFAULT_SEED_CASES = [
         "age": 23,
         "gender": "Male",
         "clothes": "BLUE SHIRT",
+        "city": "kurnool",
         "last_seen_location": "CAR STAND",
         "status": "ACTIVE",
         "created_at": "Today, 14:10",
@@ -88,6 +209,7 @@ DEFAULT_SEED_CASES = [
         "age": 19,
         "gender": "Male",
         "clothes": "black and white shirt",
+        "city": "kurnool",
         "last_seen_location": "RGM grounds",
         "status": "ACTIVE",
         "created_at": "Today, 12:45",
@@ -97,70 +219,169 @@ DEFAULT_SEED_CASES = [
     },
     {
         "id": 3,
+        "name": "Rajesh Kumar",
+        "age": 24,
+        "gender": "Male",
+        "clothes": "Red polo shirt, jeans",
+        "city": "hyderabad",
+        "last_seen_location": "Charminar Heritage Zone",
+        "status": "ACTIVE",
+        "created_at": "Today, 11:20",
+        "assigned_team": "Hyderabad Disaster Quick Response Team",
+        "lat": 17.3616,
+        "lon": 78.4747,
+    },
+    {
+        "id": 4,
+        "name": "Priya Sharma",
+        "age": 21,
+        "gender": "Female",
+        "clothes": "Yellow kurti, white leggings",
+        "city": "bengaluru",
+        "last_seen_location": "Majestic Central Terminal",
+        "status": "ACTIVE",
+        "created_at": "Today, 09:30",
+        "assigned_team": "Bengaluru Red Cross Unit",
+        "lat": 12.9767,
+        "lon": 77.5713,
+    },
+    {
+        "id": 5,
+        "name": "Anand Varma",
+        "age": 31,
+        "gender": "Male",
+        "clothes": "Grey formal shirt, black pants",
+        "city": "vijayawada",
+        "last_seen_location": "PNBS Central Bus Station",
+        "status": "ACTIVE",
+        "created_at": "Yesterday, 20:15",
+        "assigned_team": "Amaravati Emergency Corps",
+        "lat": 16.5165,
+        "lon": 80.6200,
+    },
+    {
+        "id": 6,
+        "name": "Kavitha Rao",
+        "age": 27,
+        "gender": "Female",
+        "clothes": "Blue saree",
+        "city": "visakhapatnam",
+        "last_seen_location": "RK Beach Promenade",
+        "status": "ACTIVE",
+        "created_at": "Yesterday, 17:00",
+        "assigned_team": "Coastal Rescue Force",
+        "lat": 17.7126,
+        "lon": 83.3182,
+    },
+    {
+        "id": 7,
+        "name": "Venkatesh M",
+        "age": 58,
+        "gender": "Male",
+        "clothes": "White dhoti and shirt",
+        "city": "tirupati",
+        "last_seen_location": "Alipiri Footpath Toll Gate",
+        "status": "ACTIVE",
+        "created_at": "Yesterday, 15:45",
+        "assigned_team": "Tirumala Pilgrim Assistance Patrol",
+        "lat": 13.6521,
+        "lon": 79.3872,
+    },
+    {
+        "id": 8,
         "name": "Nani kumar",
         "age": 17,
         "gender": "Male",
         "clothes": "white shirt black pant",
+        "city": "kurnool",
         "last_seen_location": "cantene",
         "status": "ACTIVE",
-        "created_at": "Today, 11:30",
+        "created_at": "2 days ago",
         "assigned_team": "Volunteer Unit A",
         "lat": 15.8350,
         "lon": 78.0450,
     },
     {
-        "id": 4,
+        "id": 9,
         "name": "S.Yakub",
         "age": 20,
         "gender": "Male",
         "clothes": "black shirt with blue jeens",
+        "city": "kurnool",
         "last_seen_location": "DS labs",
         "status": "ACTIVE",
-        "created_at": "Yesterday, 18:20",
+        "created_at": "2 days ago",
         "assigned_team": "Helping Hands NGO",
         "lat": 15.8200,
         "lon": 78.0450,
     },
     {
-        "id": 5,
+        "id": 10,
         "name": "S.javeed",
         "age": 19,
         "gender": "Male",
         "clothes": "greyish green shirt",
+        "city": "kurnool",
         "last_seen_location": "RGM hostel",
         "status": "ACTIVE",
-        "created_at": "Yesterday, 16:00",
+        "created_at": "3 days ago",
         "assigned_team": "City Police Patrol 1",
         "lat": 15.8150,
         "lon": 78.0300,
     },
     {
-        "id": 6,
+        "id": 11,
         "name": "Tharnish",
         "age": 28,
         "gender": "Male",
         "clothes": "red shirt",
+        "city": "kurnool",
         "last_seen_location": "RGM gardens",
         "status": "RESCUED",
-        "created_at": "2 days ago",
+        "created_at": "4 days ago",
         "assigned_team": "Volunteer Unit A",
         "lat": 15.8340,
         "lon": 78.0560,
     },
     {
-        "id": 7,
+        "id": 12,
         "name": "D.Kasim",
         "age": 67,
         "gender": "Male",
         "clothes": "white blue shirt",
+        "city": "kurnool",
         "last_seen_location": "maha nandhi",
         "status": "CLOSED",
-        "created_at": "3 days ago",
+        "created_at": "5 days ago",
         "assigned_team": "Helping Hands NGO",
         "lat": 15.8100,
         "lon": 78.0600,
     },
 ]
+
+
+def _infer_city(name_or_loc: str) -> str:
+    """Infer city string from location or landmark name."""
+    text = (name_or_loc or "").lower()
+    if any(k in text for k in ["charminar", "hitec", "secunderabad", "gachibowli", "hyderabad"]):
+        return "hyderabad"
+    if any(k in text for k in ["majestic", "mg road", "electronic city", "whitefield", "bengaluru", "bangalore"]):
+        return "bengaluru"
+    if any(k in text for k in ["pnbs", "benz circle", "prakasam", "vijayawada"]):
+        return "vijayawada"
+    if any(k in text for k in ["beach", "rtc complex", "visakhapatnam", "vizag"]):
+        return "visakhapatnam"
+    if any(k in text for k in ["alipiri", "tirumala", "tirupati"]):
+        return "tirupati"
+    if any(k in text for k in ["nandyal", "sanjeeva"]):
+        return "nandyal"
+    if any(k in text for k in ["chennai", "central", "t-nagar", "marina"]):
+        return "chennai"
+    if any(k in text for k in ["csmt", "gateway", "bandra", "mumbai"]):
+        return "mumbai"
+    if any(k in text for k in ["connaught", "delhi", "anand vihar"]):
+        return "delhi"
+    return "kurnool"
 
 
 def connect(settings: Optional[Settings] = None, vector: bool = True):
@@ -178,7 +399,6 @@ def connect(settings: Optional[Settings] = None, vector: bool = True):
 def init_db(settings: Optional[Settings] = None) -> None:
     if settings is None:
         settings = get_settings()
-    # Connect plain first to ensure vector extension can be created
     conn = connect(settings, vector=False)
     with conn, conn.cursor() as cur:
         if os.path.exists(SCHEMA_PATH):
@@ -193,9 +413,14 @@ def ensure_db_schema(settings: Optional[Settings] = None) -> bool:
         init_db(settings)
         conn = connect(settings, vector=False)
         with conn, conn.cursor() as cur:
-            # Add missing columns safely if upgrading existing tables
+            # Upgrade columns safely
             cur.execute("ALTER TABLE rescue_teams ADD COLUMN IF NOT EXISTS username VARCHAR(100);")
             cur.execute("ALTER TABLE rescue_teams ADD COLUMN IF NOT EXISTS password VARCHAR(100);")
+            cur.execute("ALTER TABLE rescue_teams ADD COLUMN IF NOT EXISTS city VARCHAR(100) DEFAULT 'kurnool';")
+            cur.execute("ALTER TABLE rescue_teams ADD COLUMN IF NOT EXISTS email VARCHAR(150);")
+            cur.execute("ALTER TABLE missing_persons ADD COLUMN IF NOT EXISTS city VARCHAR(100) DEFAULT 'kurnool';")
+            cur.execute("ALTER TABLE missing_persons ADD COLUMN IF NOT EXISTS photo_path TEXT;")
+            cur.execute("ALTER TABLE missing_persons ADD COLUMN IF NOT EXISTS contact_phone VARCHAR(50);")
             cur.execute("ALTER TABLE missing_persons ADD COLUMN IF NOT EXISTS last_seen_latitude DOUBLE PRECISION;")
             cur.execute("ALTER TABLE missing_persons ADD COLUMN IF NOT EXISTS last_seen_longitude DOUBLE PRECISION;")
 
@@ -208,36 +433,37 @@ def ensure_db_schema(settings: Optional[Settings] = None) -> bool:
                     (cname, clat, clon),
                 )
 
-            # Check rescue teams count
-            cur.execute("SELECT COUNT(*) FROM rescue_teams")
-            count_teams = cur.fetchone()[0]
-            if count_teams == 0:
-                for t in DEFAULT_SEED_TEAMS:
+            # Ensure all seed teams exist across all cities
+            for t in DEFAULT_SEED_TEAMS:
+                cur.execute("SELECT id FROM rescue_teams WHERE name=%s LIMIT 1", (t["name"],))
+                existing_team = cur.fetchone()
+                if not existing_team:
                     cur.execute(
                         """INSERT INTO rescue_teams
-                           (name, organization_type, contact_phone, current_location_name, latitude, longitude, is_available, username, password)
-                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                        (t["name"], t["org"], t["phone"], t["base_location"], t["lat"], t["lon"], t["available"], t["username"], t["password"]),
+                           (name, organization_type, contact_phone, city, current_location_name, latitude, longitude, is_available, username, password, email)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                        (t["name"], t["org"], t["phone"], t["city"], t["base_location"], t["lat"], t["lon"], t["available"], t["username"], t["password"], t.get("email", "")),
                     )
-            else:
-                # Update existing teams with default credentials and current phone numbers if NULL
-                cur.execute("UPDATE rescue_teams SET username='helping_hands', password='ngo123', contact_phone='6303126628' WHERE name ILIKE '%Helping Hands%' AND (username IS NULL OR contact_phone != '6303126628');")
-                cur.execute("UPDATE rescue_teams SET username='police_patrol', password='police123' WHERE name ILIKE '%Police%' AND username IS NULL;")
-                cur.execute("UPDATE rescue_teams SET username='volunteer_a', password='volunteer123' WHERE name ILIKE '%Volunteer%' AND username IS NULL;")
+                else:
+                    cur.execute(
+                        """UPDATE rescue_teams
+                           SET city=%s, organization_type=%s, username=COALESCE(username, %s), password=COALESCE(password, %s), email=COALESCE(email, %s)
+                           WHERE id=%s""",
+                        (t["city"], t["org"], t["username"], t["password"], t.get("email", ""), existing_team[0]),
+                    )
 
-            # Check missing persons count
-            cur.execute("SELECT COUNT(*) FROM missing_persons")
-            count_cases = cur.fetchone()[0]
-            if count_cases == 0:
-                for c in DEFAULT_SEED_CASES:
+            # Ensure all seed cases exist across all cities
+            for c in DEFAULT_SEED_CASES:
+                cur.execute("SELECT id FROM missing_persons WHERE name=%s LIMIT 1", (c["name"],))
+                existing_case = cur.fetchone()
+                if not existing_case:
                     cur.execute(
                         """INSERT INTO missing_persons
-                           (name, age, gender, clothes_description, last_seen_location, case_status, last_seen_latitude, last_seen_longitude)
-                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-                        (c["name"], c["age"], c["gender"], c["clothes"], c["last_seen_location"], c["status"], c["lat"], c["lon"]),
+                           (name, age, gender, clothes_description, city, last_seen_location, case_status, last_seen_latitude, last_seen_longitude)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                        (c["name"], c["age"], c["gender"], c["clothes"], c["city"], c["last_seen_location"], c["status"], c["lat"], c["lon"]),
                     )
                     new_pid = cur.fetchone()[0]
-                    # Link initial case assignment if team exists
                     cur.execute("SELECT id FROM rescue_teams WHERE name=%s LIMIT 1", (c["assigned_team"],))
                     t_row = cur.fetchone()
                     if t_row:
@@ -245,16 +471,27 @@ def ensure_db_schema(settings: Optional[Settings] = None) -> bool:
                             "INSERT INTO case_assignments (missing_person_id, rescue_team_id, status) VALUES (%s, %s, 'ACTIVE')",
                             (new_pid, t_row[0]),
                         )
-            else:
-                # Backfill coordinates for existing cases from DEFAULT_CAMERAS if NULL
-                for cname, (clat, clon) in DEFAULT_CAMERAS.items():
+                else:
                     cur.execute(
                         """UPDATE missing_persons
-                           SET last_seen_latitude=%s, last_seen_longitude=%s
-                           WHERE (last_seen_latitude IS NULL OR last_seen_longitude IS NULL)
-                             AND (last_seen_location ILIKE %s OR last_seen_location = %s)""",
-                        (clat, clon, f"%{cname}%", cname),
+                           SET city=%s, last_seen_latitude=COALESCE(last_seen_latitude, %s), last_seen_longitude=COALESCE(last_seen_longitude, %s)
+                           WHERE id=%s""",
+                        (c["city"], c["lat"], c["lon"], existing_case[0]),
                     )
+
+            # Auto-infer city for any cases where city is NULL or defaulted incorrectly
+            cur.execute("SELECT id, name, last_seen_location, city FROM missing_persons")
+            for pid, pname, ploc, pcity in cur.fetchall():
+                inferred = _infer_city(ploc or pname or "")
+                if pcity is None or (pcity == "kurnool" and inferred != "kurnool"):
+                    cur.execute("UPDATE missing_persons SET city=%s WHERE id=%s", (inferred, pid))
+
+            # Auto-infer city for any rescue teams where city is NULL
+            cur.execute("SELECT id, name, current_location_name, city FROM rescue_teams")
+            for tid, tname, tloc, tcity in cur.fetchall():
+                inferred = _infer_city(tname or tloc or "")
+                if tcity is None:
+                    cur.execute("UPDATE rescue_teams SET city=%s WHERE id=%s", (inferred, tid))
 
             conn.commit()
         conn.close()
@@ -273,9 +510,9 @@ def load_cases_from_db(settings: Optional[Settings] = None) -> List[Dict[str, An
         with conn, conn.cursor() as cur:
             query = """
                 SELECT m.id, m.name, m.age, m.gender, m.clothes_description,
-                       m.last_seen_location, m.case_status, m.created_at,
-                       m.last_seen_latitude, m.last_seen_longitude,
-                       r.name AS assigned_team
+                       m.city, m.last_seen_location, m.case_status, m.created_at,
+                       m.last_seen_latitude, m.last_seen_longitude, m.photo_path,
+                       m.contact_phone, r.name AS assigned_team
                 FROM missing_persons m
                 LEFT JOIN LATERAL (
                     SELECT rescue_team_id FROM case_assignments
@@ -283,25 +520,29 @@ def load_cases_from_db(settings: Optional[Settings] = None) -> List[Dict[str, An
                     ORDER BY id DESC LIMIT 1
                 ) ca ON TRUE
                 LEFT JOIN rescue_teams r ON ca.rescue_team_id = r.id
-                ORDER BY m.id ASC
+                ORDER BY m.id DESC
             """
             cur.execute(query)
             for r in cur.fetchall():
-                pid, name, age, gender, clothes, loc, status, created_at, lat, lon, assigned_team = r
+                pid, name, age, gender, clothes, city, loc, status, created_at, lat, lon, photo, phone, assigned_team = r
                 created_str = created_at.strftime("%d %b, %H:%M") if hasattr(created_at, "strftime") else "Recently"
                 default_coords = DEFAULT_CAMERAS.get(loc or "", (15.8281, 78.0373))
+                case_city = (city or _infer_city(loc or name or "") or "kurnool").lower()
                 cases.append({
                     "id": pid,
                     "name": name,
                     "age": age or 25,
                     "gender": gender or "Male",
                     "clothes": clothes or "",
+                    "city": case_city,
                     "last_seen_location": loc or "CAR STAND",
                     "status": status or "ACTIVE",
                     "created_at": created_str,
                     "assigned_team": assigned_team or "Helping Hands NGO",
                     "lat": float(lat) if lat is not None else default_coords[0],
                     "lon": float(lon) if lon is not None else default_coords[1],
+                    "photo_path": photo or "",
+                    "phone": phone or "",
                 })
         conn.close()
         if cases:
@@ -315,21 +556,26 @@ def save_case_to_db(case: Dict[str, Any], settings: Optional[Settings] = None) -
     """Insert a new missing person case into PostgreSQL and assign team."""
     try:
         conn = connect(settings, vector=False)
+        city = (case.get("city") or _infer_city(case.get("last_seen_location", "") or case.get("name", "")) or "kurnool").lower()
         with conn, conn.cursor() as cur:
             cur.execute(
                 """INSERT INTO missing_persons
-                   (name, age, gender, clothes_description, last_seen_location, case_status, last_seen_latitude, last_seen_longitude)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                   (name, age, gender, clothes_description, city, last_seen_location, case_status,
+                    last_seen_latitude, last_seen_longitude, photo_path, contact_phone)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                    RETURNING id, created_at""",
                 (
                     case.get("name", "Unnamed Case"),
-                    case.get("age", 20),
+                    int(case.get("age", 20)),
                     case.get("gender", "Unknown"),
                     case.get("clothes", ""),
+                    city,
                     case.get("last_seen_location", "CAR STAND"),
                     case.get("status", "ACTIVE"),
                     float(case.get("lat", 15.8281)),
                     float(case.get("lon", 78.0373)),
+                    case.get("photo_path", ""),
+                    case.get("phone", ""),
                 ),
             )
             row = cur.fetchone()
@@ -337,6 +583,7 @@ def save_case_to_db(case: Dict[str, Any], settings: Optional[Settings] = None) -
             created_at = row[1].strftime("%d %b, %H:%M") if hasattr(row[1], "strftime") else "Just now"
             case["id"] = new_id
             case["created_at"] = created_at
+            case["city"] = city
 
             assigned_team_name = case.get("assigned_team")
             if assigned_team_name:
@@ -349,7 +596,7 @@ def save_case_to_db(case: Dict[str, Any], settings: Optional[Settings] = None) -
                     )
             conn.commit()
         conn.close()
-        print(f"[+] Case #{new_id} ({case.get('name')}) successfully saved to PostgreSQL.")
+        print(f"[+] Case #{new_id} ({case.get('name')}, {city.upper()}) successfully saved to PostgreSQL.")
         return case
     except Exception as exc:
         print(f"[!] save_case_to_db warning: {exc}")
@@ -375,25 +622,29 @@ def delete_case_from_db(case_id: int, settings: Optional[Settings] = None) -> bo
 
 
 def load_teams_from_db(settings: Optional[Settings] = None) -> List[Dict[str, Any]]:
-    """Fetch rescue teams / NGOs from PostgreSQL."""
+    """Fetch all rescue teams from PostgreSQL."""
     try:
         conn = connect(settings, vector=False)
         teams = []
         with conn, conn.cursor() as cur:
             cur.execute("""
-                SELECT id, name, organization_type, contact_phone, current_location_name,
-                       latitude, longitude, is_available, username, password
+                SELECT id, name, organization_type, contact_phone, city,
+                       current_location_name, latitude, longitude, is_available,
+                       username, password, email
                 FROM rescue_teams
                 ORDER BY id ASC
             """)
             for r in cur.fetchall():
-                tid, name, org, phone, base, lat, lon, avail, uname, pwd = r
+                tid, name, org, phone, city, loc, lat, lon, avail, uname, pwd, email = r
+                team_city = (city or _infer_city(loc or name or "") or "kurnool").lower()
                 teams.append({
                     "id": tid,
                     "name": name,
                     "org": org or "NGO",
-                    "phone": phone or "N/A",
-                    "base_location": base or "Base Station",
+                    "city": team_city,
+                    "phone": phone or "6303126628",
+                    "email": email or "",
+                    "base_location": loc or "Base Outpost",
                     "lat": float(lat) if lat is not None else 15.8350,
                     "lon": float(lon) if lon is not None else 78.0450,
                     "available": bool(avail) if avail is not None else True,
@@ -412,29 +663,33 @@ def save_team_to_db(team: Dict[str, Any], settings: Optional[Settings] = None) -
     """Insert a new rescue team / NGO into PostgreSQL."""
     try:
         conn = connect(settings, vector=False)
+        city = (team.get("city") or _infer_city(team.get("base_location", "") or team.get("name", "")) or "kurnool").lower()
         with conn, conn.cursor() as cur:
             cur.execute(
                 """INSERT INTO rescue_teams
-                   (name, organization_type, contact_phone, current_location_name, latitude, longitude, is_available, username, password)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   (name, organization_type, contact_phone, city, current_location_name, latitude, longitude, is_available, username, password, email)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                    RETURNING id""",
                 (
                     team.get("name", "New Rescue Team"),
                     team.get("org", "NGO"),
                     team.get("phone", "6303126628"),
-                    team.get("base_location", "Kurnool"),
+                    city,
+                    team.get("base_location", f"{city.title()} Base"),
                     float(team.get("lat", 15.8350)),
                     float(team.get("lon", 78.0450)),
                     team.get("available", True),
                     team.get("username", "new_team").strip(),
                     team.get("password", "ngo123").strip(),
+                    team.get("email", "").strip(),
                 ),
             )
             new_id = cur.fetchone()[0]
             team["id"] = new_id
+            team["city"] = city
             conn.commit()
         conn.close()
-        print(f"[+] Team #{new_id} ({team.get('name')}) successfully saved to PostgreSQL.")
+        print(f"[+] Team #{new_id} ({team.get('name')}, {city.upper()}) successfully saved to PostgreSQL.")
         return team
     except Exception as exc:
         print(f"[!] save_team_to_db warning: {exc}")
