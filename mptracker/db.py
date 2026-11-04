@@ -603,6 +603,41 @@ def save_case_to_db(case: Dict[str, Any], settings: Optional[Settings] = None) -
         return case
 
 
+def update_case_status_in_db(case_id: int, status: str, notes: str = "", settings: Optional[Settings] = None) -> bool:
+    """Update missing person case_status in PostgreSQL and adjust dispatches and assignments."""
+    status = (status or "ACTIVE").upper()
+    if status not in ("ACTIVE", "RESCUED", "CLOSED"):
+        status = "ACTIVE"
+    try:
+        conn = connect(settings, vector=False)
+        with conn, conn.cursor() as cur:
+            cur.execute("UPDATE missing_persons SET case_status=%s WHERE id=%s", (status, case_id))
+            if status == "ACTIVE":
+                cur.execute("UPDATE case_assignments SET status='ACTIVE' WHERE missing_person_id=%s", (case_id,))
+                cur.execute(
+                    """UPDATE rescue_dispatches
+                       SET status='EN_ROUTE', responder_notes=%s, resolved_at=NULL
+                       WHERE missing_person_id=%s""",
+                    (f"Status reset to ACTIVE. {notes}".strip(), case_id),
+                )
+            elif status in ("RESCUED", "CLOSED"):
+                dispatch_status = "VERIFIED_FOUND" if status == "RESCUED" else "NOT_FOUND"
+                cur.execute(
+                    """UPDATE rescue_dispatches
+                       SET status=%s, responder_notes=%s, resolved_at=CURRENT_TIMESTAMP
+                       WHERE missing_person_id=%s""",
+                    (dispatch_status, notes or f"Marked as {status}", case_id),
+                )
+                cur.execute("UPDATE case_assignments SET status='RESOLVED' WHERE missing_person_id=%s", (case_id,))
+            conn.commit()
+        conn.close()
+        print(f"[+] Case #{case_id} status updated to {status} in PostgreSQL.")
+        return True
+    except Exception as exc:
+        print(f"[!] update_case_status_in_db warning: {exc}")
+        return False
+
+
 def delete_case_from_db(case_id: int, settings: Optional[Settings] = None) -> bool:
     """Delete case and all associated dispatches/assignments/sightings from PostgreSQL."""
     try:

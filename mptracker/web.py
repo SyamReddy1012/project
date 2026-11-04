@@ -26,6 +26,7 @@ from .db import (
     load_cases_from_db,
     save_case_to_db,
     delete_case_from_db,
+    update_case_status_in_db,
     load_teams_from_db,
     save_team_to_db,
     delete_team_from_db,
@@ -3342,7 +3343,15 @@ HTML_APP = """<!DOCTYPE html>
           <td>${c.age} / ${c.gender}</td>
           <td style="color: var(--text-muted);">${c.clothes || 'Standard'}</td>
           <td><b>${c.last_seen_location}</b></td>
-          <td><span class="tag ${statusClass}">${statusPulse}${c.status}</span></td>
+          <td>
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <select onchange="setCaseStatus(${c.id}, this.value)" title="Change case status directly in PostgreSQL" style="background: var(--card); border: 1px solid var(--card-border); color: var(--text); padding: 3px 6px; border-radius: 6px; font-size: 0.76rem; font-weight: 700; cursor: pointer;">
+                <option value="ACTIVE" ${c.status === 'ACTIVE' ? 'selected' : ''}>?? ACTIVE</option>
+                <option value="RESCUED" ${c.status === 'RESCUED' ? 'selected' : ''}>? RESCUED</option>
+                <option value="CLOSED" ${c.status === 'CLOSED' ? 'selected' : ''}>?? CLOSED</option>
+              </select>
+            </div>
+          </td>
           <td>${assignColumn}</td>
           <td style="text-align: right; white-space: nowrap;">${actionButtons}</td>
         `;
@@ -4454,11 +4463,35 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             self._send_json({"status": "success"})
             return
 
+        if parsed.path == "/api/cases/status":
+            cid = int(body.get("id", 0) or body.get("case_id", 0))
+            new_status = body.get("status", "ACTIVE").upper()
+            if new_status not in ("ACTIVE", "RESCUED", "CLOSED"):
+                new_status = "ACTIVE"
+            notes = body.get("notes", f"Status updated to {new_status}")
+
+            update_case_status_in_db(case_id=cid, status=new_status, notes=notes)
+
+            for c in APP_STATE["cases"]:
+                if c["id"] == cid:
+                    c["status"] = new_status
+
+            self._send_json({
+                "case_id": cid,
+                "status": new_status,
+                "message": f"Case #{cid} status updated to {new_status} in PostgreSQL database."
+            })
+            return
+
         if parsed.path == "/api/cases/delete":
-            cid = int(body.get("id", 0))
+            cid = int(body.get("id", 0) or body.get("case_id", 0))
             delete_case_from_db(cid)
             APP_STATE["cases"] = [c for c in APP_STATE["cases"] if c["id"] != cid]
-            self._send_json({"deleted": cid, "status": "success"})
+            if "dispatches" in APP_STATE:
+                APP_STATE["dispatches"] = [d for d in APP_STATE["dispatches"] if d.get("case_id") != cid]
+            if "notifications" in APP_STATE:
+                APP_STATE["notifications"] = [n for n in APP_STATE["notifications"] if n.get("case_id") != cid]
+            self._send_json({"deleted": cid, "status": "success", "message": f"Case #{cid} permanently deleted from database."})
             return
 
         if parsed.path == "/api/resolve-dispatch":
@@ -4466,9 +4499,15 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             outcome = body.get("outcome", "found")
             notes = body.get("notes", "")
 
-            resolve_dispatch_in_db(case_id=cid, outcome=outcome, notes=notes)
+            if outcome in ("reset_active", "active"):
+                new_status = "ACTIVE"
+            elif outcome == "found":
+                new_status = "RESCUED"
+            else:
+                new_status = "CLOSED"
 
-            new_status = "RESCUED" if outcome == "found" else "CLOSED"
+            update_case_status_in_db(case_id=cid, status=new_status, notes=notes)
+
             for c in APP_STATE["cases"]:
                 if c["id"] == cid:
                     c["status"] = new_status
