@@ -9,6 +9,11 @@ import psycopg2
 from pgvector.psycopg2 import register_vector
 
 from .config import Settings, get_settings
+
+
+class DatabaseError(RuntimeError):
+    """Raised when a database connection or query operation fails."""
+    pass
 import hashlib
 import secrets
 
@@ -446,12 +451,15 @@ def _infer_city(name_or_loc: str) -> str:
 def connect(settings: Optional[Settings] = None, vector: bool = True):
     if settings is None:
         settings = get_settings()
-    conn = psycopg2.connect(**settings.db_kwargs)
+    if settings.database_url:
+        conn = psycopg2.connect(settings.database_url)
+    else:
+        conn = psycopg2.connect(**settings.db_kwargs)
     if vector:
         try:
             register_vector(conn)
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"[!] pgvector registration notice: {exc}")
     return conn
 
 
@@ -460,6 +468,7 @@ def init_db(settings: Optional[Settings] = None) -> None:
         settings = get_settings()
     conn = connect(settings, vector=False)
     with conn, conn.cursor() as cur:
+        cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
         if os.path.exists(SCHEMA_PATH):
             with open(SCHEMA_PATH, encoding="utf-8") as fh:
                 cur.execute(fh.read())
@@ -579,8 +588,8 @@ def load_cases_from_db(settings: Optional[Settings] = None) -> List[Dict[str, An
         conn.close()
         return cases
     except Exception as exc:
-        print(f"[!] load_cases_from_db connection failure: {exc}")
-        return list(DEFAULT_SEED_CASES)
+        print(f"[!] load_cases_from_db failure: {exc}")
+        raise DatabaseError(f"Database error loading cases: {exc}") from exc
 
 
 def save_case_to_db(case: Dict[str, Any], settings: Optional[Settings] = None) -> Dict[str, Any]:
@@ -630,8 +639,8 @@ def save_case_to_db(case: Dict[str, Any], settings: Optional[Settings] = None) -
         print(f"[+] Case #{new_id} ({case.get('name')}, {city.upper()}) successfully saved to PostgreSQL.")
         return case
     except Exception as exc:
-        print(f"[!] save_case_to_db warning: {exc}")
-        return case
+        print(f"[!] save_case_to_db failure: {exc}")
+        raise DatabaseError(f"Database error saving case '{case.get('name')}': {exc}") from exc
 
 
 def update_case_in_db(case_id: int, updates: Dict[str, Any], settings: Optional[Settings] = None) -> Optional[Dict[str, Any]]:
@@ -725,8 +734,8 @@ def update_case_in_db(case_id: int, updates: Dict[str, Any], settings: Optional[
             "assigned_team": assigned_team or "Helping Hands NGO",
         }
     except Exception as exc:
-        print(f"[!] update_case_in_db warning: {exc}")
-        return None
+        print(f"[!] update_case_in_db failure: {exc}")
+        raise DatabaseError(f"Database error updating case #{case_id}: {exc}") from exc
 
 
 def update_case_status_in_db(case_id: int, status: str, notes: str = "", settings: Optional[Settings] = None) -> bool:
@@ -760,8 +769,8 @@ def update_case_status_in_db(case_id: int, status: str, notes: str = "", setting
         print(f"[+] Case #{case_id} status updated to {status} in PostgreSQL.")
         return True
     except Exception as exc:
-        print(f"[!] update_case_status_in_db warning: {exc}")
-        return False
+        print(f"[!] update_case_status_in_db failure: {exc}")
+        raise DatabaseError(f"Database error updating status for case #{case_id}: {exc}") from exc
 
 
 def delete_case_from_db(case_id: int, settings: Optional[Settings] = None) -> bool:
@@ -778,8 +787,8 @@ def delete_case_from_db(case_id: int, settings: Optional[Settings] = None) -> bo
         print(f"[+] Case #{case_id} deleted from PostgreSQL.")
         return True
     except Exception as exc:
-        print(f"[!] delete_case_from_db warning: {exc}")
-        return False
+        print(f"[!] delete_case_from_db failure: {exc}")
+        raise DatabaseError(f"Database error deleting case #{case_id}: {exc}") from exc
 
 
 def load_teams_from_db(settings: Optional[Settings] = None) -> List[Dict[str, Any]]:
@@ -815,8 +824,8 @@ def load_teams_from_db(settings: Optional[Settings] = None) -> List[Dict[str, An
         conn.close()
         return teams
     except Exception as exc:
-        print(f"[!] load_teams_from_db connection failure: {exc}")
-        return list(DEFAULT_SEED_TEAMS)
+        print(f"[!] load_teams_from_db failure: {exc}")
+        raise DatabaseError(f"Database error loading rescue teams: {exc}") from exc
 
 
 def save_team_to_db(team: Dict[str, Any], settings: Optional[Settings] = None) -> Dict[str, Any]:
@@ -852,8 +861,8 @@ def save_team_to_db(team: Dict[str, Any], settings: Optional[Settings] = None) -
         print(f"[+] Team #{new_id} ({team.get('name')}, {city.upper()}) successfully saved to PostgreSQL.")
         return team
     except Exception as exc:
-        print(f"[!] save_team_to_db warning: {exc}")
-        return team
+        print(f"[!] save_team_to_db failure: {exc}")
+        raise DatabaseError(f"Database error saving team '{team.get('name')}': {exc}") from exc
 
 
 def delete_team_from_db(team_id: int, settings: Optional[Settings] = None) -> bool:
@@ -869,8 +878,8 @@ def delete_team_from_db(team_id: int, settings: Optional[Settings] = None) -> bo
         print(f"[+] Team #{team_id} deleted from PostgreSQL.")
         return True
     except Exception as exc:
-        print(f"[!] delete_team_from_db warning: {exc}")
-        return False
+        print(f"[!] delete_team_from_db failure: {exc}")
+        raise DatabaseError(f"Database error deleting team #{team_id}: {exc}") from exc
 
 
 def save_sighting_to_db(
@@ -922,8 +931,8 @@ def save_sighting_to_db(
         print(f"[+] Sighting #{sighting_id} for Case #{case_id} recorded at {camera_name} in PostgreSQL.")
         return sighting_id
     except Exception as exc:
-        print(f"[!] save_sighting_to_db warning: {exc}")
-        return None
+        print(f"[!] save_sighting_to_db failure: {exc}")
+        raise DatabaseError(f"Database error saving sighting: {exc}") from exc
 
 
 def save_dispatch_to_db(
@@ -966,8 +975,8 @@ def save_dispatch_to_db(
         print(f"[+] Dispatch #{disp_id} (Case #{case_id} -> Team #{team_id}) recorded in PostgreSQL.")
         return disp_id
     except Exception as exc:
-        print(f"[!] save_dispatch_to_db warning: {exc}")
-        return None
+        print(f"[!] save_dispatch_to_db failure: {exc}")
+        raise DatabaseError(f"Database error saving dispatch: {exc}") from exc
 
 
 def resolve_dispatch_in_db(
@@ -1013,8 +1022,8 @@ def resolve_dispatch_in_db(
         print(f"[+] Case #{case_id} resolved as {new_case_status} in PostgreSQL.")
         return True
     except Exception as exc:
-        print(f"[!] resolve_dispatch_in_db warning: {exc}")
-        return False
+        print(f"[!] resolve_dispatch_in_db failure: {exc}")
+        raise DatabaseError(f"Database error resolving dispatch: {exc}") from exc
 
 
 def load_dispatches_from_db(settings: Optional[Settings] = None) -> List[Dict[str, Any]]:
@@ -1058,5 +1067,5 @@ def load_dispatches_from_db(settings: Optional[Settings] = None) -> List[Dict[st
         conn.close()
         return dispatches
     except Exception as exc:
-        print(f"[!] load_dispatches_from_db warning: {exc}")
-        return []
+        print(f"[!] load_dispatches_from_db failure: {exc}")
+        raise DatabaseError(f"Database error loading dispatches: {exc}") from exc

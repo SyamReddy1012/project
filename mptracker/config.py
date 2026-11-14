@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import urllib.parse
 from dataclasses import dataclass
 
 
@@ -19,6 +20,7 @@ def _load_dotenv(path: str = ".env") -> None:
 
 @dataclass(frozen=True)
 class Settings:
+    database_url: str
     db_name: str
     db_user: str
     db_password: str
@@ -28,27 +30,40 @@ class Settings:
     detector_backend: str
     cosine_threshold: float
     frame_skip: int
+    port: int = 10000
     min_face_px: int = 28
 
     @property
     def db_kwargs(self) -> dict:
-        return {
+        kw = {
             "dbname": self.db_name,
             "user": self.db_user,
             "password": self.db_password,
             "host": self.db_host,
             "port": self.db_port,
         }
+        if self.db_host and self.db_host not in ("localhost", "127.0.0.1"):
+            kw["sslmode"] = "require"
+        return kw
 
 
 def get_settings() -> Settings:
     _load_dotenv()
     env = os.environ.get
     db_url = env("DATABASE_URL", "").strip()
+
+    # Ensure remote connection strings enforce SSL
     if db_url:
-        import urllib.parse
         p = urllib.parse.urlparse(db_url)
-        db_name = p.path.lstrip("/") or env("DB_NAME", "FACEPROJECT")
+        # If remote and sslmode not set, append sslmode=require
+        if p.hostname and p.hostname not in ("localhost", "127.0.0.1"):
+            q = urllib.parse.parse_qs(p.query)
+            if "sslmode" not in q:
+                sep = "&" if p.query else "?"
+                db_url = f"{db_url}{sep}sslmode=require"
+                p = urllib.parse.urlparse(db_url)
+
+        db_name = p.path.lstrip("/") or env("DB_NAME", "neondb")
         db_user = p.username or env("DB_USER", "postgres")
         db_password = p.password or env("DB_PASSWORD", "")
         db_host = p.hostname or env("DB_HOST", "localhost")
@@ -60,7 +75,10 @@ def get_settings() -> Settings:
         db_host = env("DB_HOST", "localhost")
         db_port = int(env("DB_PORT", "5432"))
 
+    port = int(env("PORT", "10000"))
+
     return Settings(
+        database_url=db_url,
         db_name=db_name,
         db_user=db_user,
         db_password=db_password,
@@ -70,4 +88,5 @@ def get_settings() -> Settings:
         detector_backend=env("FACE_DETECTOR", "retinaface"),
         cosine_threshold=float(env("COSINE_THRESHOLD", "0.60")),
         frame_skip=int(env("FRAME_SKIP", "3")),
+        port=port,
     )

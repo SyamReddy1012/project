@@ -21,7 +21,11 @@ import urllib.request
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import hashlib
+import hmac
 from .db import (
+    DatabaseError,
+    connect,
     verify_password,
     hash_password,
     ensure_db_schema,
@@ -3390,6 +3394,13 @@ HTML_APP = """<!DOCTYPE html>
       }
     }
 
+    function getAuthHeaders() {
+      const h = { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' };
+      const tok = sessionStorage.getItem('mptracker_token');
+      if (tok) h['Authorization'] = 'Bearer ' + tok;
+      return h;
+    }
+
     async function handleLoginSubmit(e) {
       e.preventDefault();
       const isAdmin = document.getElementById('login-role-admin').classList.contains('active');
@@ -3415,6 +3426,9 @@ HTML_APP = """<!DOCTYPE html>
 
         sessionStorage.setItem('mptracker_role', loggedInRole);
         sessionStorage.setItem('mptracker_team', JSON.stringify(loggedInTeam));
+        if (data.token) {
+          sessionStorage.setItem('mptracker_token', data.token);
+        }
 
         document.getElementById('screen-login').style.display = 'none';
         document.getElementById('screen-app').style.display = 'flex';
@@ -3431,6 +3445,7 @@ HTML_APP = """<!DOCTYPE html>
     function handleLogout() {
       sessionStorage.removeItem('mptracker_role');
       sessionStorage.removeItem('mptracker_team');
+      sessionStorage.removeItem('mptracker_token');
       loggedInRole = null;
       loggedInTeam = null;
       currentRole = 'admin';
@@ -4122,7 +4137,7 @@ HTML_APP = """<!DOCTYPE html>
       try {
         const res = await fetch('/api/cases/allot', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ case_id: caseId, team_id: teamId, note: note, phone: phone })
         });
         const data = await res.json();
@@ -4189,7 +4204,7 @@ HTML_APP = """<!DOCTYPE html>
       try {
         const res = await fetch('/api/teams/add', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' },
+          headers: getAuthHeaders(),
           body: JSON.stringify(newTeam)
         });
         const saved = await res.json();
@@ -4210,7 +4225,7 @@ HTML_APP = """<!DOCTYPE html>
       try {
         await fetch('/api/teams/delete', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ id: id })
         });
         showToast(`Team #${id} removed`);
@@ -4239,7 +4254,7 @@ HTML_APP = """<!DOCTYPE html>
       try {
         const res = await fetch('/api/cases/add', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' },
+          headers: getAuthHeaders(),
           body: JSON.stringify(newCase)
         });
         closeAddCaseModal();
@@ -4259,7 +4274,7 @@ HTML_APP = """<!DOCTYPE html>
       try {
         await fetch('/api/cases/delete', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ id: id })
         });
         showToast(`Case #${id} removed`);
@@ -4317,7 +4332,7 @@ HTML_APP = """<!DOCTYPE html>
       try {
         const res = await fetch('/api/cases/update', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ id: caseId, city: newCity })
         });
         const data = await res.json();
@@ -4346,7 +4361,7 @@ HTML_APP = """<!DOCTYPE html>
       try {
         const res = await fetch('/api/cases/status', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ id: caseId, status: newStatus })
         });
         const data = await res.json();
@@ -4529,7 +4544,7 @@ HTML_APP = """<!DOCTYPE html>
       try {
         const res = await fetch('/api/cases/update', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' },
+          headers: getAuthHeaders(),
           body: JSON.stringify(payload)
         });
         const data = await res.json();
@@ -4742,7 +4757,7 @@ HTML_APP = """<!DOCTYPE html>
 
         await fetch('/api/scan', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin'},
+          headers: getAuthHeaders(),
           body: JSON.stringify({ camera_location: selectedCamKey, case_id: matchCaseId, person_name: matchPerson, city: currentCity })
         });
 
@@ -4798,6 +4813,37 @@ HTML_APP = """<!DOCTYPE html>
 """
 
 
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin").strip()
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123").strip()
+SECRET_KEY = os.getenv("SECRET_KEY", "mptracker-render-neon-token-secret-2026").encode("utf-8")
+
+
+def _create_session_token(role: str, username: str) -> str:
+    timestamp = int(time.time())
+    data = f"{role}:{username}:{timestamp}"
+    sig = hmac.new(SECRET_KEY, data.encode("utf-8"), hashlib.sha256).hexdigest()
+    raw = f"{data}:{sig}".encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("utf-8")
+
+
+def _verify_session_token(token: str) -> tuple[bool, str, str]:
+    try:
+        raw = base64.urlsafe_b64decode(token.encode("utf-8")).decode("utf-8")
+        parts = raw.split(":")
+        if len(parts) != 4:
+            return False, "", ""
+        role, username, ts_str, sig = parts
+        data = f"{role}:{username}:{ts_str}"
+        expected = hmac.new(SECRET_KEY, data.encode("utf-8"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            return False, "", ""
+        if time.time() - int(ts_str) > 86400:
+            return False, "", ""
+        return True, role, username
+    except Exception:
+        return False, "", ""
+
+
 class MPTrackerHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         print(f"[HTTP] {self.command} {self.path} - {format % args}")
@@ -4817,7 +4863,25 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
         query = urllib.parse.parse_qs(parsed.query)
 
         if path in ("/health", "/healthz"):
-            self._send_json({"status": "healthy"})
+            try:
+                with connect() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT 1;")
+                        cur.execute("SELECT extversion FROM pg_extension WHERE extname = 'vector';")
+                        ext_row = cur.fetchone()
+                        vec_ver = ext_row[0] if ext_row else "not installed"
+                self._send_json({
+                    "status": "healthy",
+                    "database": "connected",
+                    "vector_extension": vec_ver,
+                    "engine": "neon-postgresql",
+                }, status=200)
+            except Exception as exc:
+                self._send_json({
+                    "status": "unhealthy",
+                    "database": "disconnected",
+                    "error": str(exc),
+                }, status=503)
             return
 
         if path == "/api/stats":
@@ -4825,24 +4889,34 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/teams":
-            db_teams = load_teams_from_db()
-            if db_teams is not None:
-                APP_STATE["teams"] = db_teams
-            self._send_json(APP_STATE["teams"])
+            try:
+                db_teams = load_teams_from_db()
+                if db_teams is not None:
+                    APP_STATE["teams"] = db_teams
+                safe_teams = [{k: v for k, v in t.items() if k != "password"} for t in APP_STATE["teams"]]
+                self._send_json(safe_teams)
+            except Exception as exc:
+                self._send_json({"error": f"Database error loading teams: {exc}", "status": "error"}, status=503)
             return
 
         if path == "/api/cases":
-            db_cases = load_cases_from_db()
-            if db_cases is not None:
-                APP_STATE["cases"] = db_cases
-            self._send_json(APP_STATE["cases"])
+            try:
+                db_cases = load_cases_from_db()
+                if db_cases is not None:
+                    APP_STATE["cases"] = db_cases
+                self._send_json(APP_STATE["cases"])
+            except Exception as exc:
+                self._send_json({"error": f"Database error loading cases: {exc}", "status": "error"}, status=503)
             return
 
         if path == "/api/dispatches":
-            db_dispatches = load_dispatches_from_db()
-            if db_dispatches:
-                APP_STATE["dispatches"] = db_dispatches
-            self._send_json(APP_STATE["dispatches"])
+            try:
+                db_dispatches = load_dispatches_from_db()
+                if db_dispatches:
+                    APP_STATE["dispatches"] = db_dispatches
+                self._send_json(APP_STATE["dispatches"])
+            except Exception as exc:
+                self._send_json({"error": f"Database error loading dispatches: {exc}", "status": "error"}, status=503)
             return
 
         if path == "/api/search-party-route":
@@ -4977,8 +5051,9 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             pwd = body.get("password", "").strip()
 
             if role == "admin":
-                if uname == "admin" and pwd == "admin123":
-                    self._send_json({"status": "success", "role": "admin"})
+                if uname == ADMIN_USERNAME and pwd == ADMIN_PASSWORD:
+                    token = _create_session_token("admin", uname)
+                    self._send_json({"status": "success", "role": "admin", "token": token})
                     return
                 self._send_json({"status": "error", "error": "Invalid admin credentials"}, status=401)
                 return
@@ -4986,15 +5061,29 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             # NGO Team login check with salted password verification
             for t in APP_STATE["teams"]:
                 if t.get("username") == uname and verify_password(t.get("password", ""), pwd):
-                    self._send_json({"status": "success", "role": "ngo", "team": t})
+                    token = _create_session_token("ngo", uname)
+                    safe_team = {k: v for k, v in t.items() if k != "password"}
+                    self._send_json({"status": "success", "role": "ngo", "team": safe_team, "token": token})
                     return
 
             self._send_json({"status": "error", "error": "Invalid NGO username or password"}, status=401)
             return
 
-        # Server-side role authorization check: reject NGO calls to command-level admin endpoints
+        # Role authorization check: verify Bearer session token first, with fallback to X-User-Role header
+        auth_header = self.headers.get("Authorization", "").strip()
         role_header = self.headers.get("X-User-Role", "").strip().lower()
-        if role_header == "ngo" and parsed.path in (
+        effective_role = ""
+
+        if auth_header.startswith("Bearer "):
+            tok = auth_header[7:].strip()
+            valid, token_role, _ = _verify_session_token(tok)
+            if valid:
+                effective_role = token_role
+
+        if not effective_role and role_header:
+            effective_role = role_header
+
+        if effective_role == "ngo" and parsed.path in (
             "/api/teams/add",
             "/api/teams/delete",
             "/api/cases/add",
@@ -5006,230 +5095,243 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/teams/add":
-            city_id = (body.get("city") or "kurnool").lower()
-            new_id = max([t["id"] for t in APP_STATE["teams"]], default=0) + 1
-            entry = {
-                "id": new_id,
-                "name": body.get("name", "New Rescue Team").strip(),
-                "org": body.get("org", "NGO"),
-                "city": city_id,
-                "phone": body.get("phone", "6303126628").strip(),
-                "email": body.get("email", "").strip(),
-                "base_location": body.get("base_location", f"{city_id.title()} Base").strip(),
-                "lat": float(body.get("lat", 15.8350)),
-                "lon": float(body.get("lon", 78.0450)),
-                "username": body.get("username", f"ngo_{new_id}").strip(),
-                "password": body.get("password", "ngo123").strip(),
-                "available": True,
-            }
-            saved_entry = save_team_to_db(entry)
-            APP_STATE["teams"].append(saved_entry)
-            self._send_json(saved_entry, status=201)
+            try:
+                city_id = (body.get("city") or "kurnool").lower()
+                new_id = max([t["id"] for t in APP_STATE["teams"]], default=0) + 1
+                entry = {
+                    "id": new_id,
+                    "name": body.get("name", "New Rescue Team").strip(),
+                    "org": body.get("org", "NGO"),
+                    "city": city_id,
+                    "phone": body.get("phone", "6303126628").strip(),
+                    "email": body.get("email", "").strip(),
+                    "base_location": body.get("base_location", f"{city_id.title()} Base").strip(),
+                    "lat": float(body.get("lat", 15.8350)),
+                    "lon": float(body.get("lon", 78.0450)),
+                    "username": body.get("username", f"ngo_{new_id}").strip(),
+                    "password": body.get("password", "ngo123").strip(),
+                    "available": True,
+                }
+                saved_entry = save_team_to_db(entry)
+                APP_STATE["teams"].append(saved_entry)
+                safe_saved = {k: v for k, v in saved_entry.items() if k != "password"}
+                self._send_json(safe_saved, status=201)
+            except Exception as exc:
+                self._send_json({"error": f"Failed to save rescue team to database: {exc}", "status": "error"}, status=500)
             return
 
         if parsed.path == "/api/teams/delete":
-            tid = int(body.get("id", 0))
-            delete_team_from_db(tid)
-            APP_STATE["teams"] = [t for t in APP_STATE["teams"] if t["id"] != tid]
-            self._send_json({"deleted": tid, "status": "success"})
+            try:
+                tid = int(body.get("id", 0))
+                delete_team_from_db(tid)
+                APP_STATE["teams"] = [t for t in APP_STATE["teams"] if t["id"] != tid]
+                self._send_json({"deleted": tid, "status": "success"})
+            except Exception as exc:
+                self._send_json({"error": f"Failed to delete team from database: {exc}", "status": "error"}, status=500)
             return
 
         if parsed.path == "/api/scan":
-            cam = body.get("camera_location", "CAR STAND")
-            cid = int(body.get("case_id", 1))
-            pname = body.get("person_name", "N.K.SYAM")
+            try:
+                cam = body.get("camera_location", "CAR STAND")
+                cid = int(body.get("case_id", 1))
+                pname = body.get("person_name", "N.K.SYAM")
 
-            coords = CAMERA_LOCATIONS.get(cam, {"lat": 15.8281, "lon": 78.0373})
+                coords = CAMERA_LOCATIONS.get(cam, {"lat": 15.8281, "lon": 78.0373})
 
-            # Record camera sighting into PostgreSQL person_sightings & update missing_persons
-            sighting_id = save_sighting_to_db(
-                case_id=cid,
-                camera_name=cam,
-                lat=coords["lat"],
-                lon=coords["lon"],
-                video_source=body.get("video_source", "Surveillance CCTV"),
-                confidence_dist=float(body.get("confidence", 0.28)),
-            )
+                # Record camera sighting into PostgreSQL person_sightings & update missing_persons
+                sighting_id = save_sighting_to_db(
+                    case_id=cid,
+                    camera_name=cam,
+                    lat=coords["lat"],
+                    lon=coords["lon"],
+                    video_source=body.get("video_source", "Surveillance CCTV"),
+                    confidence_dist=float(body.get("confidence", 0.28)),
+                )
 
-            # Auto-assign dispatch in DB
-            target_team = APP_STATE["teams"][0] if APP_STATE["teams"] else {"id": 1, "name": "Helping Hands NGO", "lat": 15.8350, "lon": 78.0450}
-            avail = [t for t in APP_STATE["teams"] if t.get("available", True)]
-            if avail:
-                target_team = avail[0]
+                # Auto-assign dispatch in DB
+                target_team = APP_STATE["teams"][0] if APP_STATE["teams"] else {"id": 1, "name": "Helping Hands NGO", "lat": 15.8350, "lon": 78.0450}
+                avail = [t for t in APP_STATE["teams"] if t.get("available", True)]
+                if avail:
+                    target_team = avail[0]
 
-            route = _calculate_shortest_route(
-                target_team.get("lat", 15.8350), target_team.get("lon", 78.0450),
-                coords["lat"], coords["lon"],
-            )
-            dist_km = route.get("distance_km", 1.74)
-            eta_min = route.get("eta_minutes", 2.8)
+                route = _calculate_shortest_route(
+                    target_team.get("lat", 15.8350), target_team.get("lon", 78.0450),
+                    coords["lat"], coords["lon"],
+                )
+                dist_km = route.get("distance_km", 1.74)
+                eta_min = route.get("eta_minutes", 2.8)
 
-            disp_id = save_dispatch_to_db(
-                case_id=cid,
-                team_id=target_team.get("id", 1),
-                location_name=cam,
-                distance_km=dist_km,
-                eta_minutes=eta_min,
-                status="EN_ROUTE",
-                notes=f"Surveillance match detected at {cam}",
-            )
+                disp_id = save_dispatch_to_db(
+                    case_id=cid,
+                    team_id=target_team.get("id", 1),
+                    location_name=cam,
+                    distance_km=dist_km,
+                    eta_minutes=eta_min,
+                    status="EN_ROUTE",
+                    notes=f"Surveillance match detected at {cam}",
+                )
 
-            disp_record = {
-                "id": disp_id or 101,
-                "case_id": cid,
-                "person_name": pname,
-                "team_id": target_team.get("id", 1),
-                "team_name": target_team.get("name", "Helping Hands NGO"),
-                "target_location": cam,
-                "target_lat": coords["lat"],
-                "target_lon": coords["lon"],
-                "team_lat": target_team.get("lat", 15.8350),
-                "team_lon": target_team.get("lon", 78.0450),
-                "distance_km": dist_km,
-                "eta_minutes": eta_min,
-                "status": "EN_ROUTE",
-            }
-            if APP_STATE["dispatches"]:
-                APP_STATE["dispatches"][0] = disp_record
-            else:
-                APP_STATE["dispatches"].append(disp_record)
-
-            for c in APP_STATE["cases"]:
-                if c["id"] == cid:
-                    c["last_seen_location"] = cam
-                    c["lat"] = coords["lat"]
-                    c["lon"] = coords["lon"]
-
-            self._send_json({
-                "status": "success",
-                "matched_person": pname,
-                "camera_location": cam,
-                "lat": coords["lat"],
-                "lon": coords["lon"],
-                "sighting_id": sighting_id,
-                "dispatch_id": disp_id,
-            })
-            return
-
-
-        if parsed.path == "/api/cases/add":
-            city_id = (body.get("city") or "kurnool").lower()
-            loc_name = body.get("last_seen_location", "").strip() or "CAR STAND"
-            coords = CAMERA_LOCATIONS.get(loc_name)
-            if not coords:
-                lat_val = float(body.get("lat")) if body.get("lat") is not None else None
-                lon_val = float(body.get("lon")) if body.get("lon") is not None else None
-                if lat_val is not None and lon_val is not None:
-                    coords = {"lat": lat_val, "lon": lon_val, "city": city_id}
-                elif city_id in CITIES:
-                    coords = {"lat": CITIES[city_id]["lat"], "lon": CITIES[city_id]["lon"], "city": city_id}
+                disp_record = {
+                    "id": disp_id or 101,
+                    "case_id": cid,
+                    "person_name": pname,
+                    "team_id": target_team.get("id", 1),
+                    "team_name": target_team.get("name", "Helping Hands NGO"),
+                    "target_location": cam,
+                    "target_lat": coords["lat"],
+                    "target_lon": coords["lon"],
+                    "team_lat": target_team.get("lat", 15.8350),
+                    "team_lon": target_team.get("lon", 78.0450),
+                    "distance_km": dist_km,
+                    "eta_minutes": eta_min,
+                    "status": "EN_ROUTE",
+                }
+                if APP_STATE["dispatches"]:
+                    APP_STATE["dispatches"][0] = disp_record
                 else:
-                    coords = {"lat": 15.8281, "lon": 78.0373, "city": "kurnool"}
-                CAMERA_LOCATIONS[loc_name] = {
+                    APP_STATE["dispatches"].append(disp_record)
+
+                for c in APP_STATE["cases"]:
+                    if c["id"] == cid:
+                        c["last_seen_location"] = cam
+                        c["lat"] = coords["lat"]
+                        c["lon"] = coords["lon"]
+
+                self._send_json({
+                    "status": "success",
+                    "matched_person": pname,
+                    "camera_location": cam,
                     "lat": coords["lat"],
                     "lon": coords["lon"],
+                    "sighting_id": sighting_id,
+                    "dispatch_id": disp_id,
+                })
+            except Exception as exc:
+                self._send_json({"error": f"Failed to record scan or dispatch in database: {exc}", "status": "error"}, status=500)
+            return
+
+        if parsed.path == "/api/cases/add":
+            try:
+                city_id = (body.get("city") or "kurnool").lower()
+                loc_name = body.get("last_seen_location", "").strip() or "CAR STAND"
+                coords = CAMERA_LOCATIONS.get(loc_name)
+                if not coords:
+                    lat_val = float(body.get("lat")) if body.get("lat") is not None else None
+                    lon_val = float(body.get("lon")) if body.get("lon") is not None else None
+                    if lat_val is not None and lon_val is not None:
+                        coords = {"lat": lat_val, "lon": lon_val, "city": city_id}
+                    elif city_id in CITIES:
+                        coords = {"lat": CITIES[city_id]["lat"], "lon": CITIES[city_id]["lon"], "city": city_id}
+                    else:
+                        coords = {"lat": 15.8281, "lon": 78.0373, "city": "kurnool"}
+                    CAMERA_LOCATIONS[loc_name] = {
+                        "lat": coords["lat"],
+                        "lon": coords["lon"],
+                        "city": city_id,
+                        "label": f"{loc_name} ({coords['lat']:.4f}, {coords['lon']:.4f})",
+                    }
+
+                assigned_team_name = body.get("assigned_team", "Helping Hands NGO")
+
+                photo_path = ""
+                photo_data = body.get("photo_data", "") or body.get("photo", "")
+                if photo_data and photo_data.startswith("data:image"):
+                    try:
+                        header, encoded = photo_data.split(",", 1)
+                        img_bytes = base64.b64decode(encoded)
+                        os.makedirs("uploads", exist_ok=True)
+                        clean_name = re.sub(r'[^a-zA-Z0-9_]', '', body.get("name", "person").lower())
+                        filename = f"person_{int(time.time())}_{clean_name}.jpg"
+                        filepath = os.path.join("uploads", filename)
+                        with open(filepath, "wb") as f:
+                            f.write(img_bytes)
+                        photo_path = f"/uploads/{filename}"
+                    except Exception as exc:
+                        print(f"[!] Photo decode warning: {exc}")
+                elif body.get("photo_path"):
+                    photo_path = body.get("photo_path")
+
+                entry = {
+                    "name": body.get("name", "Unnamed Case").strip(),
                     "city": city_id,
-                    "label": f"{loc_name} ({coords['lat']:.4f}, {coords['lon']:.4f})",
+                    "age": int(body.get("age", 20)),
+                    "gender": body.get("gender", "Unknown"),
+                    "clothes": body.get("clothes", "").strip(),
+                    "last_seen_location": loc_name,
+                    "status": "ACTIVE",
+                    "created_at": datetime.now().strftime("%d %b, %H:%M"),
+                    "assigned_team": assigned_team_name,
+                    "lat": coords["lat"],
+                    "lon": coords["lon"],
+                    "photo_path": photo_path,
+                    "phone": body.get("phone", "").strip(),
                 }
+                saved_entry = save_case_to_db(entry)
+                APP_STATE["cases"].insert(0, saved_entry)
 
-            assigned_team_name = body.get("assigned_team", "Helping Hands NGO")
+                target_team = next((t for t in APP_STATE["teams"] if t["name"] == assigned_team_name), None)
+                if target_team:
+                    _send_case_allotment_notification(saved_entry, target_team, "New case enrolled and allotted by Police Command.")
 
-            # Process photo if provided (base64 data URL)
-            photo_path = ""
-            photo_data = body.get("photo_data", "") or body.get("photo", "")
-            if photo_data and photo_data.startswith("data:image"):
-                try:
-                    header, encoded = photo_data.split(",", 1)
-                    img_bytes = base64.b64decode(encoded)
-                    os.makedirs("uploads", exist_ok=True)
-                    clean_name = re.sub(r'[^a-zA-Z0-9_]', '', body.get("name", "person").lower())
-                    filename = f"person_{int(time.time())}_{clean_name}.jpg"
-                    filepath = os.path.join("uploads", filename)
-                    with open(filepath, "wb") as f:
-                        f.write(img_bytes)
-                    photo_path = f"/uploads/{filename}"
-                except Exception as exc:
-                    print(f"[!] Photo decode warning: {exc}")
-            elif body.get("photo_path"):
-                photo_path = body.get("photo_path")
-
-            entry = {
-                "name": body.get("name", "Unnamed Case").strip(),
-                "city": city_id,
-                "age": int(body.get("age", 20)),
-                "gender": body.get("gender", "Unknown"),
-                "clothes": body.get("clothes", "").strip(),
-                "last_seen_location": loc_name,
-                "status": "ACTIVE",
-                "created_at": datetime.now().strftime("%d %b, %H:%M"),
-                "assigned_team": assigned_team_name,
-                "lat": coords["lat"],
-                "lon": coords["lon"],
-                "photo_path": photo_path,
-                "phone": body.get("phone", "").strip(),
-            }
-            saved_entry = save_case_to_db(entry)
-            APP_STATE["cases"].insert(0, saved_entry)
-
-            # Auto-dispatch notification + simulated SMS to the allotted NGO
-            target_team = next((t for t in APP_STATE["teams"] if t["name"] == assigned_team_name), None)
-            if target_team:
-                _send_case_allotment_notification(saved_entry, target_team, "New case enrolled and allotted by Police Command.")
-
-            self._send_json(saved_entry, status=201)
+                self._send_json(saved_entry, status=201)
+            except Exception as exc:
+                self._send_json({"error": f"Failed to save case to database: {exc}", "status": "error"}, status=500)
             return
 
         if parsed.path == "/api/cases/allot":
-            cid = int(body.get("case_id", 0))
-            team_id = int(body.get("team_id", 0))
-            team_name = body.get("team_name", "")
-            note = body.get("note", "").strip()
-            custom_phone = body.get("phone", "").strip()
+            try:
+                cid = int(body.get("case_id", 0))
+                team_id = int(body.get("team_id", 0))
+                team_name = body.get("team_name", "")
+                note = body.get("note", "").strip()
+                custom_phone = body.get("phone", "").strip()
 
-            target_case = next((c for c in APP_STATE["cases"] if c["id"] == cid), None)
-            if not target_case:
-                self._send_json({"status": "error", "error": "Case not found"}, status=404)
-                return
+                target_case = next((c for c in APP_STATE["cases"] if c["id"] == cid), None)
+                if not target_case:
+                    self._send_json({"status": "error", "error": "Case not found"}, status=404)
+                    return
 
-            target_team = None
-            if team_id:
-                target_team = next((t for t in APP_STATE["teams"] if t["id"] == team_id), None)
-            elif team_name:
-                target_team = next((t for t in APP_STATE["teams"] if t["name"] == team_name), None)
+                target_team = None
+                if team_id:
+                    target_team = next((t for t in APP_STATE["teams"] if t["id"] == team_id), None)
+                elif team_name:
+                    target_team = next((t for t in APP_STATE["teams"] if t["name"] == team_name), None)
 
-            if not target_team:
-                self._send_json({"status": "error", "error": "NGO Team not found"}, status=404)
-                return
+                if not target_team:
+                    self._send_json({"status": "error", "error": "NGO Team not found"}, status=404)
+                    return
 
-            if custom_phone:
-                target_team["phone"] = custom_phone
+                if custom_phone:
+                    target_team["phone"] = custom_phone
 
-            target_case["assigned_team"] = target_team["name"]
-            notif = _send_case_allotment_notification(target_case, target_team, note, phone_override=custom_phone)
+                target_case["assigned_team"] = target_team["name"]
+                notif = _send_case_allotment_notification(target_case, target_team, note, phone_override=custom_phone)
 
-            # Persist allotment & dispatch in PostgreSQL
-            route = _calculate_shortest_route(
-                target_team.get("lat", 15.8350), target_team.get("lon", 78.0450),
-                target_case.get("lat", 15.8281), target_case.get("lon", 78.0373),
-            )
-            disp_id = save_dispatch_to_db(
-                case_id=cid,
-                team_id=target_team["id"],
-                location_name=target_case.get("last_seen_location", "CAR STAND"),
-                distance_km=route.get("distance_km", 1.74),
-                eta_minutes=route.get("eta_minutes", 2.8),
-                status="EN_ROUTE",
-                notes=note,
-            )
+                # Persist allotment & dispatch in PostgreSQL
+                route = _calculate_shortest_route(
+                    target_team.get("lat", 15.8350), target_team.get("lon", 78.0450),
+                    target_case.get("lat", 15.8281), target_case.get("lon", 78.0373),
+                )
+                disp_id = save_dispatch_to_db(
+                    case_id=cid,
+                    team_id=target_team["id"],
+                    location_name=target_case.get("last_seen_location", "CAR STAND"),
+                    distance_km=route.get("distance_km", 1.74),
+                    eta_minutes=route.get("eta_minutes", 2.8),
+                    status="EN_ROUTE",
+                    notes=note,
+                )
 
-            self._send_json({
-                "status": "success",
-                "message": f"Case #{cid} ({target_case['name']}) successfully allotted to {target_team['name']}. Alert dispatched to {notif['phone']}!",
-                "notification": notif,
-                "case": target_case,
-                "sms_alert": notif["sms_status"],
-                "dispatch_id": disp_id,
-            })
+                self._send_json({
+                    "status": "success",
+                    "message": f"Case #{cid} ({target_case['name']}) successfully allotted to {target_team['name']}. Alert dispatched to {notif['phone']}!",
+                    "notification": notif,
+                    "case": target_case,
+                    "sms_alert": notif["sms_status"],
+                    "dispatch_id": disp_id,
+                })
+            except Exception as exc:
+                self._send_json({"error": f"Failed to record allotment in database: {exc}", "status": "error"}, status=500)
             return
 
         if parsed.path == "/api/notifications/mark-read":
@@ -5246,98 +5348,110 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/cases/update":
-            cid = int(body.get("id", 0) or body.get("case_id", 0))
-            if not cid:
-                self._send_json({"error": "Missing case id"}, status=400)
-                return
+            try:
+                cid = int(body.get("id", 0) or body.get("case_id", 0))
+                if not cid:
+                    self._send_json({"error": "Missing case id"}, status=400)
+                    return
 
-            photo_data = body.get("photo_data", "")
-            if photo_data and photo_data.startswith("data:image"):
-                try:
-                    header, encoded = photo_data.split(",", 1)
-                    img_bytes = base64.b64decode(encoded)
-                    os.makedirs("uploads", exist_ok=True)
-                    clean_name = re.sub(r'[^a-zA-Z0-9_]', '', body.get("name", "person").lower())
-                    filename = f"person_{int(time.time())}_{clean_name}.jpg"
-                    filepath = os.path.join("uploads", filename)
-                    with open(filepath, "wb") as f:
-                        f.write(img_bytes)
-                    body["photo_path"] = f"/uploads/{filename}"
-                except Exception as exc:
-                    print(f"[!] Photo update decode warning: {exc}")
+                photo_data = body.get("photo_data", "")
+                if photo_data and photo_data.startswith("data:image"):
+                    try:
+                        header, encoded = photo_data.split(",", 1)
+                        img_bytes = base64.b64decode(encoded)
+                        os.makedirs("uploads", exist_ok=True)
+                        clean_name = re.sub(r'[^a-zA-Z0-9_]', '', body.get("name", "person").lower())
+                        filename = f"person_{int(time.time())}_{clean_name}.jpg"
+                        filepath = os.path.join("uploads", filename)
+                        with open(filepath, "wb") as f:
+                            f.write(img_bytes)
+                        body["photo_path"] = f"/uploads/{filename}"
+                    except Exception as exc:
+                        print(f"[!] Photo update decode warning: {exc}")
 
-            updated_case = update_case_in_db(cid, body)
-            if not updated_case:
-                self._send_json({"error": "Case not found"}, status=404)
-                return
+                updated_case = update_case_in_db(cid, body)
+                if not updated_case:
+                    self._send_json({"error": "Case not found"}, status=404)
+                    return
 
-            for c in APP_STATE["cases"]:
-                if c["id"] == cid:
-                    c.update(updated_case)
-                    break
+                for c in APP_STATE["cases"]:
+                    if c["id"] == cid:
+                        c.update(updated_case)
+                        break
 
-            resp = dict(updated_case)
-            resp["status"] = "success"
-            resp["message"] = f"Case #{cid} ({updated_case['name']}) updated in PostgreSQL database."
-            resp["case"] = updated_case
-            self._send_json(resp)
+                resp = dict(updated_case)
+                resp["status"] = "success"
+                resp["message"] = f"Case #{cid} ({updated_case['name']}) updated in PostgreSQL database."
+                resp["case"] = updated_case
+                self._send_json(resp)
+            except Exception as exc:
+                self._send_json({"error": f"Failed to update case in database: {exc}", "status": "error"}, status=500)
             return
 
         if parsed.path == "/api/cases/status":
-            cid = int(body.get("id", 0) or body.get("case_id", 0))
-            new_status = body.get("status", "ACTIVE").upper()
-            if new_status not in ("ACTIVE", "RESCUED", "CLOSED"):
-                new_status = "ACTIVE"
-            notes = body.get("notes", f"Status updated to {new_status}")
+            try:
+                cid = int(body.get("id", 0) or body.get("case_id", 0))
+                new_status = body.get("status", "ACTIVE").upper()
+                if new_status not in ("ACTIVE", "RESCUED", "CLOSED"):
+                    new_status = "ACTIVE"
+                notes = body.get("notes", f"Status updated to {new_status}")
 
-            update_case_status_in_db(case_id=cid, status=new_status, notes=notes)
+                update_case_status_in_db(case_id=cid, status=new_status, notes=notes)
 
-            for c in APP_STATE["cases"]:
-                if c["id"] == cid:
-                    c["status"] = new_status
+                for c in APP_STATE["cases"]:
+                    if c["id"] == cid:
+                        c["status"] = new_status
 
-            self._send_json({
-                "case_id": cid,
-                "status": new_status,
-                "message": f"Case #{cid} status updated to {new_status} in PostgreSQL database."
-            })
+                self._send_json({
+                    "case_id": cid,
+                    "status": new_status,
+                    "message": f"Case #{cid} status updated to {new_status} in PostgreSQL database."
+                })
+            except Exception as exc:
+                self._send_json({"error": f"Failed to update case status in database: {exc}", "status": "error"}, status=500)
             return
 
         if parsed.path == "/api/cases/delete":
-            cid = int(body.get("id", 0) or body.get("case_id", 0))
-            delete_case_from_db(cid)
-            APP_STATE["cases"] = [c for c in APP_STATE["cases"] if c["id"] != cid]
-            if "dispatches" in APP_STATE:
-                APP_STATE["dispatches"] = [d for d in APP_STATE["dispatches"] if d.get("case_id") != cid]
-            if "notifications" in APP_STATE:
-                APP_STATE["notifications"] = [n for n in APP_STATE["notifications"] if n.get("case_id") != cid]
-            self._send_json({"deleted": cid, "status": "success", "message": f"Case #{cid} permanently deleted from database."})
+            try:
+                cid = int(body.get("id", 0) or body.get("case_id", 0))
+                delete_case_from_db(cid)
+                APP_STATE["cases"] = [c for c in APP_STATE["cases"] if c["id"] != cid]
+                if "dispatches" in APP_STATE:
+                    APP_STATE["dispatches"] = [d for d in APP_STATE["dispatches"] if d.get("case_id") != cid]
+                if "notifications" in APP_STATE:
+                    APP_STATE["notifications"] = [n for n in APP_STATE["notifications"] if n.get("case_id") != cid]
+                self._send_json({"deleted": cid, "status": "success", "message": f"Case #{cid} permanently deleted from database."})
+            except Exception as exc:
+                self._send_json({"error": f"Failed to delete case from database: {exc}", "status": "error"}, status=500)
             return
 
         if parsed.path == "/api/resolve-dispatch":
-            cid = int(body.get("case_id", 1))
-            outcome = body.get("outcome", "found")
-            notes = body.get("notes", "")
+            try:
+                cid = int(body.get("case_id", 1))
+                outcome = body.get("outcome", "found")
+                notes = body.get("notes", "")
 
-            if outcome in ("reset_active", "active"):
-                new_status = "ACTIVE"
-            elif outcome == "found":
-                new_status = "RESCUED"
-            else:
-                new_status = "CLOSED"
+                if outcome in ("reset_active", "active"):
+                    new_status = "ACTIVE"
+                elif outcome == "found":
+                    new_status = "RESCUED"
+                else:
+                    new_status = "CLOSED"
 
-            update_case_status_in_db(case_id=cid, status=new_status, notes=notes)
+                update_case_status_in_db(case_id=cid, status=new_status, notes=notes)
 
-            for c in APP_STATE["cases"]:
-                if c["id"] == cid:
-                    c["status"] = new_status
+                for c in APP_STATE["cases"]:
+                    if c["id"] == cid:
+                        c["status"] = new_status
 
-            self._send_json({
-                "case_id": cid,
-                "case_status": new_status,
-                "outcome": outcome,
-                "notes": notes,
-            })
+                self._send_json({
+                    "case_id": cid,
+                    "case_status": new_status,
+                    "outcome": outcome,
+                    "notes": notes,
+                })
+            except Exception as exc:
+                self._send_json({"error": f"Failed to resolve dispatch in database: {exc}", "status": "error"}, status=500)
             return
 
 
