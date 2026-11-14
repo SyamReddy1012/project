@@ -131,7 +131,7 @@ class CoreTests(unittest.TestCase):
         import urllib.error
         import urllib.request
         from http.server import ThreadingHTTPServer
-        from mptracker.web import MPTrackerHandler
+        from mptracker.web import MPTrackerHandler, _create_session_token
 
         server = ThreadingHTTPServer(("127.0.0.1", 19888), MPTrackerHandler)
         t = threading.Thread(target=server.serve_forever, daemon=True)
@@ -139,22 +139,40 @@ class CoreTests(unittest.TestCase):
         time.sleep(0.3)
 
         try:
-            # NGO trying to add case -> expect 403 Forbidden
             payload = json.dumps({"name": "Unauthorized Case"}).encode("utf-8")
+            ngo_token = _create_session_token("ngo", "test_volunteer", team_id=1)
+
+            # 1. Unauthenticated request (or client spoofing X-User-Role without Bearer token) -> expect 401 Unauthorized
+            unauth_req = urllib.request.Request(
+                "http://127.0.0.1:19888/api/cases/add",
+                data=payload,
+                headers={"Content-Type": "application/json", "X-User-Role": "admin"},
+            )
+            with self.assertRaises(urllib.error.HTTPError) as cm_unauth:
+                urllib.request.urlopen(unauth_req)
+            self.assertEqual(cm_unauth.exception.code, 401)
+
+            # 2. Authenticated NGO Bearer token trying to add case -> expect 403 Forbidden
             req = urllib.request.Request(
                 "http://127.0.0.1:19888/api/cases/add",
                 data=payload,
-                headers={"Content-Type": "application/json", "X-User-Role": "ngo"},
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {ngo_token}",
+                },
             )
             with self.assertRaises(urllib.error.HTTPError) as cm:
                 urllib.request.urlopen(req)
             self.assertEqual(cm.exception.code, 403)
 
-            # NGO trying to add team -> expect 403 Forbidden
+            # 3. Authenticated NGO Bearer token trying to add team -> expect 403 Forbidden
             req_team = urllib.request.Request(
                 "http://127.0.0.1:19888/api/teams/add",
                 data=payload,
-                headers={"Content-Type": "application/json", "X-User-Role": "ngo"},
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {ngo_token}",
+                },
             )
             with self.assertRaises(urllib.error.HTTPError) as cm_team:
                 urllib.request.urlopen(req_team)

@@ -2064,7 +2064,7 @@ HTML_APP = """<!DOCTYPE html>
         </div>
         <div class="form-group">
           <label>Security Password / Access Token</label>
-          <input type="password" id="login-pass" value="admin123" required />
+          <input type="password" id="login-pass" placeholder="Enter password" required />
         </div>
 
         <button type="submit" class="btn" style="width: 100%; padding: 0.85rem; margin-top: 0.75rem; font-size: 0.95rem;">
@@ -3359,12 +3359,14 @@ HTML_APP = """<!DOCTYPE html>
       const ngoGroup = document.getElementById('ngo-select-group');
 
       if (role === 'admin') {
-        userInp.value = 'admin';
-        passInp.value = 'admin123';
+        userInp.value = '';
+        passInp.value = '';
         lbl.innerText = 'Command Center ID / Username';
         ngoGroup.style.display = 'none';
       } else {
         ngoGroup.style.display = 'block';
+        userInp.value = '';
+        passInp.value = '';
         handleNgoChoiceChange();
         lbl.innerText = 'Search Party / NGO Unit ID';
       }
@@ -3390,12 +3392,12 @@ HTML_APP = """<!DOCTYPE html>
       const team = allTeams.find(t => t.id === teamId);
       if (team) {
         document.getElementById('login-user').value = team.username;
-        document.getElementById('login-pass').value = team.password || 'ngo123';
+        document.getElementById('login-pass').value = '';
       }
     }
 
     function getAuthHeaders() {
-      const h = { 'Content-Type': 'application/json', 'X-User-Role': loggedInRole || 'admin' };
+      const h = { 'Content-Type': 'application/json' };
       const tok = sessionStorage.getItem('mptracker_token');
       if (tok) h['Authorization'] = 'Bearer ' + tok;
       return h;
@@ -4058,7 +4060,7 @@ HTML_APP = """<!DOCTYPE html>
       try {
         await fetch('/api/notifications/mark-read', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ id: id })
         });
         loadNotifications();
@@ -4069,7 +4071,7 @@ HTML_APP = """<!DOCTYPE html>
       try {
         await fetch('/api/notifications/mark-read', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ team_id: loggedInTeam ? loggedInTeam.id : null })
         });
         showToast('All notifications marked as read');
@@ -4287,7 +4289,7 @@ HTML_APP = """<!DOCTYPE html>
       try {
         await fetch('/api/resolve-dispatch', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ case_id: id, outcome: 'found', notes: 'Resolved by command' })
         });
         showToast(`Case #${id} marked as RESCUED`);
@@ -4305,7 +4307,7 @@ HTML_APP = """<!DOCTYPE html>
       try {
         const res = await fetch('/api/resolve-dispatch', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ case_id: caseId, outcome: outcome, notes: notes })
         });
         const result = await res.json();
@@ -4813,40 +4815,107 @@ HTML_APP = """<!DOCTYPE html>
 """
 
 
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin").strip()
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123").strip()
-SECRET_KEY = os.getenv("SECRET_KEY", "mptracker-render-neon-token-secret-2026").encode("utf-8")
+import secrets
+
+# SECRET_KEY for cryptographic token signatures
+_ENV_SECRET = os.getenv("SECRET_KEY", "").strip()
+if _ENV_SECRET:
+    SECRET_KEY = _ENV_SECRET.encode("utf-8")
+else:
+    # Ephemeral 32-byte secret if not provided in environment
+    SECRET_KEY = secrets.token_bytes(32)
 
 
-def _create_session_token(role: str, username: str) -> str:
-    timestamp = int(time.time())
-    data = f"{role}:{username}:{timestamp}"
-    sig = hmac.new(SECRET_KEY, data.encode("utf-8"), hashlib.sha256).hexdigest()
-    raw = f"{data}:{sig}".encode("utf-8")
-    return base64.urlsafe_b64encode(raw).decode("utf-8")
+def _create_session_token(role: str, username: str, team_id: int | None = None, expires_in: int = 86400) -> str:
+    """
+    Creates a tamper-proof HMAC-SHA256 signed session token.
+    Format: <base64url(payload)>.<hex(hmac_sha256(payload))>
+    """
+    now = int(time.time())
+    payload = {
+        "sub": username,
+        "role": role,
+        "team_id": team_id,
+        "iat": now,
+        "exp": now + expires_in,
+    }
+    payload_json = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    payload_b64 = base64.urlsafe_b64encode(payload_json).decode("utf-8").rstrip("=")
+    sig = hmac.new(SECRET_KEY, payload_b64.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{payload_b64}.{sig}"
 
 
-def _verify_session_token(token: str) -> tuple[bool, str, str]:
+def _verify_session_token(token: str) -> tuple[bool, dict, str]:
+    """
+    Verifies session token integrity, cryptographic signature, claims, and expiration.
+    Returns (is_valid, claims_dict, error_message).
+    """
+    if not token or not isinstance(token, str):
+        return False, {}, "Token missing or malformed"
+
+    parts = token.split(".")
+    if len(parts) != 2:
+        return False, {}, "Invalid token format (expected payload.signature)"
+
+    payload_b64, sig = parts
+    if not payload_b64 or not sig:
+        return False, {}, "Empty token components"
+
+    # 1. Constant-time signature verification (detects tampering)
+    expected_sig = hmac.new(SECRET_KEY, payload_b64.encode("utf-8"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected_sig, sig):
+        return False, {}, "Token signature verification failed (tampered)"
+
+    # 2. Decode payload
     try:
-        raw = base64.urlsafe_b64decode(token.encode("utf-8")).decode("utf-8")
-        parts = raw.split(":")
-        if len(parts) != 4:
-            return False, "", ""
-        role, username, ts_str, sig = parts
-        data = f"{role}:{username}:{ts_str}"
-        expected = hmac.new(SECRET_KEY, data.encode("utf-8"), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(expected, sig):
-            return False, "", ""
-        if time.time() - int(ts_str) > 86400:
-            return False, "", ""
-        return True, role, username
-    except Exception:
-        return False, "", ""
+        padded = payload_b64 + "=" * (-len(payload_b64) % 4)
+        payload_bytes = base64.urlsafe_b64decode(padded.encode("utf-8"))
+        claims = json.loads(payload_bytes.decode("utf-8"))
+    except Exception as exc:
+        return False, {}, f"Failed to decode token payload: {exc}"
+
+    if not isinstance(claims, dict):
+        return False, {}, "Invalid token payload structure"
+
+    # 3. Expiration verification
+    exp = claims.get("exp")
+    if exp is None or not isinstance(exp, (int, float)):
+        return False, {}, "Missing expiration claim in token"
+
+    if time.time() > exp:
+        return False, {}, "Token has expired"
+
+    # 4. Role claim verification
+    role = claims.get("role")
+    if role not in ("admin", "ngo"):
+        return False, {}, f"Invalid role claim in token: '{role}'"
+
+    return True, claims, ""
 
 
 class MPTrackerHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
-        print(f"[HTTP] {self.command} {self.path} - {format % args}")
+        sanitized_path = re.sub(r'(token|password|secret|key)=[^&]+', r'\1=[REDACTED]', self.path)
+        print(f"[HTTP] {self.command} {sanitized_path} - {format % args}")
+
+    def _authenticate_request(self) -> tuple[bool, dict, str]:
+        """
+        Validates Bearer token from Authorization header.
+        Completely ignores and rejects reliance on client-controlled X-User-Role.
+        Returns (is_authenticated, claims_dict, error_message).
+        """
+        auth_header = self.headers.get("Authorization", "").strip()
+        if not auth_header:
+            return False, {}, "Missing Authorization header with Bearer token"
+
+        if not auth_header.startswith("Bearer "):
+            return False, {}, "Invalid authorization scheme (must be 'Bearer <token>')"
+
+        tok = auth_header[7:].strip()
+        if not tok:
+            return False, {}, "Empty Bearer token provided"
+
+        return _verify_session_token(tok)
 
     def _send_json(self, data, status: int = 200):
         payload = json.dumps(data).encode("utf-8")
@@ -5051,17 +5120,28 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             pwd = body.get("password", "").strip()
 
             if role == "admin":
-                if uname == ADMIN_USERNAME and pwd == ADMIN_PASSWORD:
+                admin_user = os.getenv("ADMIN_USERNAME", "").strip()
+                admin_pass = os.getenv("ADMIN_PASSWORD", "").strip()
+                if not admin_user or not admin_pass:
+                    print("[SECURITY ALERT] Admin login rejected: ADMIN_USERNAME and ADMIN_PASSWORD must be set in environment variables.")
+                    self._send_json({
+                        "status": "error",
+                        "error": "Admin authentication is not configured on this server. ADMIN_USERNAME and ADMIN_PASSWORD must be configured."
+                    }, status=503)
+                    return
+
+                if hmac.compare_digest(uname, admin_user) and hmac.compare_digest(pwd, admin_pass):
                     token = _create_session_token("admin", uname)
                     self._send_json({"status": "success", "role": "admin", "token": token})
                     return
+
                 self._send_json({"status": "error", "error": "Invalid admin credentials"}, status=401)
                 return
 
             # NGO Team login check with salted password verification
             for t in APP_STATE["teams"]:
                 if t.get("username") == uname and verify_password(t.get("password", ""), pwd):
-                    token = _create_session_token("ngo", uname)
+                    token = _create_session_token("ngo", uname, team_id=t.get("id"))
                     safe_team = {k: v for k, v in t.items() if k != "password"}
                     self._send_json({"status": "success", "role": "ngo", "team": safe_team, "token": token})
                     return
@@ -5069,30 +5149,37 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
             self._send_json({"status": "error", "error": "Invalid NGO username or password"}, status=401)
             return
 
-        # Role authorization check: verify Bearer session token first, with fallback to X-User-Role header
-        auth_header = self.headers.get("Authorization", "").strip()
-        role_header = self.headers.get("X-User-Role", "").strip().lower()
-        effective_role = ""
-
-        if auth_header.startswith("Bearer "):
-            tok = auth_header[7:].strip()
-            valid, token_role, _ = _verify_session_token(tok)
-            if valid:
-                effective_role = token_role
-
-        if not effective_role and role_header:
-            effective_role = role_header
-
-        if effective_role == "ngo" and parsed.path in (
+        # Security Enforcement: All protected endpoints require a valid server-generated Bearer token.
+        # Client-controlled X-User-Role is completely removed and never trusted.
+        ADMIN_ONLY_PATHS = {
             "/api/teams/add",
             "/api/teams/delete",
             "/api/cases/add",
             "/api/cases/delete",
             "/api/cases/allot",
             "/api/scan",
-        ):
-            self._send_json({"status": "error", "error": "Access Denied: Police Command admin privileges required."}, status=403)
-            return
+            "/api/cases/update",
+            "/api/cases/status",
+        }
+        AUTHENTICATED_PATHS = {
+            "/api/resolve-dispatch",
+            "/api/notifications/mark-read",
+        }
+
+        if parsed.path in ADMIN_ONLY_PATHS:
+            valid, claims, err = self._authenticate_request()
+            if not valid:
+                self._send_json({"status": "error", "error": f"Unauthorized: {err}"}, status=401)
+                return
+            if claims.get("role") != "admin":
+                self._send_json({"status": "error", "error": "Access Denied: Police Command admin privileges required."}, status=403)
+                return
+
+        if parsed.path in AUTHENTICATED_PATHS:
+            valid, claims, err = self._authenticate_request()
+            if not valid:
+                self._send_json({"status": "error", "error": f"Unauthorized: {err}"}, status=401)
+                return
 
         if parsed.path == "/api/teams/add":
             try:
@@ -5109,7 +5196,7 @@ class MPTrackerHandler(BaseHTTPRequestHandler):
                     "lat": float(body.get("lat", 15.8350)),
                     "lon": float(body.get("lon", 78.0450)),
                     "username": body.get("username", f"ngo_{new_id}").strip(),
-                    "password": body.get("password", "ngo123").strip(),
+                    "password": body.get("password", "").strip() or secrets.token_urlsafe(12),
                     "available": True,
                 }
                 saved_entry = save_team_to_db(entry)

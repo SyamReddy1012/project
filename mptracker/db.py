@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -448,14 +449,25 @@ def _infer_city(name_or_loc: str) -> str:
     return "kurnool"
 
 
-def connect(settings: Optional[Settings] = None, vector: bool = True):
+def connect(settings: Optional[Settings] = None, vector: bool = True, max_retries: int = 3):
     if settings is None:
         settings = get_settings()
-    if settings.database_url:
-        conn = psycopg2.connect(settings.database_url)
-    else:
-        conn = psycopg2.connect(**settings.db_kwargs)
-    if vector:
+    conn = None
+    last_err = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            if settings.database_url:
+                conn = psycopg2.connect(settings.database_url)
+            else:
+                conn = psycopg2.connect(**settings.db_kwargs)
+            break
+        except (psycopg2.OperationalError, psycopg2.DatabaseError, Exception) as exc:
+            last_err = exc
+            if attempt < max_retries:
+                time.sleep(0.4 * attempt)
+            else:
+                raise DatabaseError(f"Database connection failed after {max_retries} attempts: {exc}") from exc
+    if vector and conn:
         try:
             register_vector(conn)
         except Exception as exc:
